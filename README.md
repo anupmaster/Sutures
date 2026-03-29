@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/anupmaster/Sutures/main/sutures-logo.svg" width="120" alt="Sutures" />
+  <img src="https://raw.githubusercontent.com/anupmaster/Sutures/main/sutures.png" width="180" alt="Sutures" />
 </p>
 
 <h1 align="center">Sutures</h1>
