@@ -1,0 +1,32 @@
+{
+  "name": "sutures",
+  "version": "0.1.0-alpha",
+  "private": true,
+  "description": "Breakpoints for AI Agents — Open-source visual debugger with live intervention for multi-agent systems",
+  "author": "Anup Karanjkar",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anupmaster/sutures.git"
+  },
+  "type": "module",
+  "bin": {
+    "sutures": "./bin/sutures.js"
+  },
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "clean": "turbo clean"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "typescript": "^5.6.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

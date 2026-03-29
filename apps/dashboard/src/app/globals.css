@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #10B981;
+  --color-brand-hover: #059669;
+
+  --color-state-idle: #6B7280;
+  --color-state-thinking: #F59E0B;
+  --color-state-acting: #3B82F6;
+  --color-state-paused: #EF4444;
+  --color-state-completed: #10B981;
+
+  --color-memory-stm: #10B981;
+  --color-memory-mtm: #F59E0B;
+  --color-memory-ltm: #8B5CF6;
+  --color-memory-shared: #3B82F6;
+  --color-memory-stale: #EF4444;
+
+  --color-pressure-safe: #10B981;
+  --color-pressure-high: #F59E0B;
+  --color-pressure-cliff: #EF4444;
+
+  --color-surface-bg: #0A0A0B;
+  --color-surface-secondary: #111113;
+  --color-surface-elevated: #1A1A1D;
+  --color-surface: #222225;
+
+  --color-text-primary: #F5F5F5;
+  --color-text-secondary: #A1A1AA;
+  --color-text-muted: #71717A;
+
+  --font-display: "JetBrains Mono", monospace;
+  --font-body: "Inter", sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-surface-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-surface-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* React Flow overrides for dark theme */
+.react-flow__background {
+  background-color: var(--color-surface-secondary) !important;
+}
+
+.react-flow__minimap {
+  background-color: var(--color-surface-elevated) !important;
+  border: 1px solid var(--color-surface) !important;
+  border-radius: 6px;
+}
+
+.react-flow__controls {
+  border: 1px solid var(--color-surface) !important;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background-color: var(--color-surface-elevated) !important;
+  border-bottom: 1px solid var(--color-surface) !important;
+  fill: var(--color-text-secondary) !important;
+}
+
+.react-flow__controls-button:hover {
+  background-color: var(--color-surface) !important;
+}

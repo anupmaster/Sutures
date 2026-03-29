@@ -1,0 +1,199 @@
+"use client";
+
+import React, { useCallback, useState } from "react";
+import {
+  Clock,
+  Crosshair,
+  DollarSign,
+  List,
+} from "lucide-react";
+import { TopBar } from "@/components/TopBar";
+import { TopologyCanvas } from "@/components/topology/TopologyCanvas";
+import { AgentInspector } from "@/components/inspector/AgentInspector";
+import { TimelinePanel } from "@/components/panels/TimelinePanel";
+import { BreakpointPanel } from "@/components/panels/BreakpointPanel";
+import { CostPanel } from "@/components/panels/CostPanel";
+import { EventLog } from "@/components/panels/EventLog";
+import { useWebSocket } from "@/hooks/useWebSocket";
+import { useEventProcessor } from "@/hooks/useEventProcessor";
+import type { DashboardCommand } from "@/lib/types";
+
+type BottomTab = "timeline" | "breakpoints" | "cost" | "events";
+
+const BOTTOM_TABS: { id: BottomTab; label: string; icon: React.ReactNode }[] = [
+  { id: "timeline", label: "Timeline", icon: <Clock size={13} /> },
+  { id: "breakpoints", label: "Breakpoints", icon: <Crosshair size={13} /> },
+  { id: "cost", label: "Cost", icon: <DollarSign size={13} /> },
+  { id: "events", label: "Events", icon: <List size={13} /> },
+];
+
+export default function DashboardPage() {
+  const [bottomTab, setBottomTab] = useState<BottomTab>("events");
+  const [bottomHeight, setBottomHeight] = useState(220);
+  const [rightWidth, setRightWidth] = useState(380);
+  const [isDraggingH, setIsDraggingH] = useState(false);
+  const [isDraggingV, setIsDraggingV] = useState(false);
+
+  const { processEvents, processTopology } = useEventProcessor();
+
+  const { status, sendCommand } = useWebSocket({
+    onEvent: processEvents,
+    onTopology: processTopology,
+  });
+
+  const handleSendCommand = useCallback(
+    (cmd: DashboardCommand) => sendCommand(cmd),
+    [sendCommand]
+  );
+
+  // Horizontal resize (right panel width)
+  const onHDragStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      setIsDraggingH(true);
+      const startX = e.clientX;
+      const startWidth = rightWidth;
+
+      const onMove = (ev: MouseEvent) => {
+        const delta = startX - ev.clientX;
+        setRightWidth(Math.max(280, Math.min(600, startWidth + delta)));
+      };
+
+      const onUp = () => {
+        setIsDraggingH(false);
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [rightWidth]
+  );
+
+  // Vertical resize (bottom panel height)
+  const onVDragStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      setIsDraggingV(true);
+      const startY = e.clientY;
+      const startHeight = bottomHeight;
+
+      const onMove = (ev: MouseEvent) => {
+        const delta = startY - ev.clientY;
+        setBottomHeight(Math.max(120, Math.min(500, startHeight + delta)));
+      };
+
+      const onUp = () => {
+        setIsDraggingV(false);
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [bottomHeight]
+  );
+
+  const renderBottomPanel = () => {
+    switch (bottomTab) {
+      case "timeline":
+        return <TimelinePanel />;
+      case "breakpoints":
+        return <BreakpointPanel />;
+      case "cost":
+        return <CostPanel />;
+      case "events":
+        return <EventLog />;
+    }
+  };
+
+  return (
+    <div
+      className="h-screen w-screen flex flex-col overflow-hidden"
+      style={{
+        backgroundColor: "#0A0A0B",
+        cursor: isDraggingH || isDraggingV ? "col-resize" : undefined,
+      }}
+    >
+      {/* Top bar */}
+      <TopBar connectionStatus={status} onSendCommand={handleSendCommand} />
+
+      {/* Main area */}
+      <div className="flex-1 flex overflow-hidden min-h-0">
+        {/* Left: Topology Canvas */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          {/* Canvas */}
+          <div className="flex-1 min-h-0">
+            <TopologyCanvas />
+          </div>
+
+          {/* Vertical resize handle */}
+          <div
+            className="h-1 cursor-row-resize shrink-0 hover:bg-[#10B98140] transition-colors"
+            style={{
+              backgroundColor: isDraggingV ? "#10B98160" : "#222225",
+            }}
+            onMouseDown={onVDragStart}
+          />
+
+          {/* Bottom panel */}
+          <div className="shrink-0" style={{ height: bottomHeight }}>
+            {/* Tab bar */}
+            <div
+              className="flex border-b shrink-0"
+              style={{
+                backgroundColor: "#0A0A0B",
+                borderColor: "#222225",
+              }}
+            >
+              {BOTTOM_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setBottomTab(tab.id)}
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-display font-medium uppercase tracking-wider transition-colors"
+                  style={{
+                    color: bottomTab === tab.id ? "#10B981" : "#71717A",
+                    borderBottom:
+                      bottomTab === tab.id
+                        ? "2px solid #10B981"
+                        : "2px solid transparent",
+                  }}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Panel content */}
+            <div
+              className="overflow-hidden"
+              style={{
+                height: bottomHeight - 34,
+                backgroundColor: "#111113",
+              }}
+            >
+              {renderBottomPanel()}
+            </div>
+          </div>
+        </div>
+
+        {/* Horizontal resize handle */}
+        <div
+          className="w-1 cursor-col-resize shrink-0 hover:bg-[#10B98140] transition-colors"
+          style={{
+            backgroundColor: isDraggingH ? "#10B98160" : "#222225",
+          }}
+          onMouseDown={onHDragStart}
+        />
+
+        {/* Right: Agent Inspector */}
+        <div className="shrink-0 overflow-hidden" style={{ width: rightWidth }}>
+          <AgentInspector />
+        </div>
+      </div>
+    </div>
+  );
+}
