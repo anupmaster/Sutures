@@ -44,3 +44,19 @@ coverage/
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# Screenshots / demo images
+sutures-*.png
+demo-*.png
+
+# Claude Code local settings
+.claude/settings.json
+.claude/settings.local.json
+
+# Playwright MCP
+.playwright-mcp/

@@ -7,14 +7,27 @@ import { useSwarmStore } from "@/stores/swarmStore";
 import { BREAKPOINT_LABELS } from "@/lib/constants";
 import type { BreakpointCondition } from "@/lib/types";
 
-const CONDITIONS: BreakpointCondition[] = [
-  "on_turn",
-  "on_tool",
-  "on_cost",
-  "on_error",
-  "on_handoff",
-  "always",
+const CONDITION_GROUPS: { label: string; conditions: BreakpointCondition[] }[] = [
+  {
+    label: "General",
+    conditions: ["always", "on_turn", "on_tool", "on_handoff", "on_cost", "on_error", "on_score"],
+  },
+  {
+    label: "Memory",
+    conditions: [
+      "on_memory_tier_migration",
+      "on_conflict_detected",
+      "on_context_pressure",
+      "on_memory_structure_switch",
+      "on_memory_link_created",
+      "on_cache_coherence_violation",
+    ],
+  },
 ];
+
+// Conditions that need a threshold/value input
+const NEEDS_THRESHOLD: BreakpointCondition[] = ["on_cost", "on_score", "on_context_pressure", "on_turn"];
+const NEEDS_VALUE: BreakpointCondition[] = ["on_tool", "on_handoff"];
 
 export function BreakpointPanel() {
   const breakpoints = useBreakpointStore((s) => s.breakpoints);
@@ -33,14 +46,19 @@ export function BreakpointPanel() {
   const agentList = Array.from(agents.values());
 
   const handleAdd = useCallback(() => {
+    const params: Record<string, unknown> = {};
+    if (NEEDS_THRESHOLD.includes(formCondition) && formThreshold) {
+      params.threshold = parseFloat(formThreshold);
+    }
+    if (NEEDS_VALUE.includes(formCondition) && formThreshold) {
+      params.value = formThreshold;
+    }
+
     const bp = {
       id: crypto.randomUUID(),
       agentId: formAgent || undefined,
       condition: formCondition,
-      params:
-        formCondition === "on_cost" && formThreshold
-          ? { threshold: parseFloat(formThreshold) }
-          : undefined,
+      params: Object.keys(params).length > 0 ? params : undefined,
       enabled: true,
       hitCount: 0,
       createdAt: new Date().toISOString(),
@@ -114,18 +132,48 @@ export function BreakpointPanel() {
                 border: "1px solid #333336",
               }}
             >
-              {CONDITIONS.map((c) => (
-                <option key={c} value={c}>
-                  {BREAKPOINT_LABELS[c]}
-                </option>
+              {CONDITION_GROUPS.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.conditions.map((c) => (
+                    <option key={c} value={c}>
+                      {BREAKPOINT_LABELS[c]}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
-          {formCondition === "on_cost" && (
+          {NEEDS_THRESHOLD.includes(formCondition) && (
             <input
               type="number"
-              step="0.01"
-              placeholder="Cost threshold ($)"
+              step={formCondition === "on_context_pressure" ? "1" : "0.01"}
+              placeholder={
+                formCondition === "on_cost"
+                  ? "Cost threshold ($)"
+                  : formCondition === "on_score"
+                  ? "Quality score threshold (0-10)"
+                  : formCondition === "on_context_pressure"
+                  ? "Context pressure % (0-100)"
+                  : "Turn number"
+              }
+              value={formThreshold}
+              onChange={(e) => setFormThreshold(e.target.value)}
+              className="w-full rounded px-2 py-1.5 text-xs font-body outline-none"
+              style={{
+                backgroundColor: "#222225",
+                color: "#F5F5F5",
+                border: "1px solid #333336",
+              }}
+            />
+          )}
+          {NEEDS_VALUE.includes(formCondition) && (
+            <input
+              type="text"
+              placeholder={
+                formCondition === "on_tool"
+                  ? "Tool name (e.g. web_search)"
+                  : "Agent ID for handoff"
+              }
               value={formThreshold}
               onChange={(e) => setFormThreshold(e.target.value)}
               className="w-full rounded px-2 py-1.5 text-xs font-body outline-none"

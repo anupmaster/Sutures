@@ -8,12 +8,19 @@ export type AgentState =
   | "completed";
 
 export type BreakpointCondition =
+  | "always"
   | "on_turn"
   | "on_tool"
+  | "on_handoff"
   | "on_cost"
   | "on_error"
-  | "on_handoff"
-  | "always";
+  | "on_score"
+  | "on_memory_tier_migration"
+  | "on_conflict_detected"
+  | "on_context_pressure"
+  | "on_memory_structure_switch"
+  | "on_memory_link_created"
+  | "on_cache_coherence_violation";
 
 export type EventCategory =
   | "lifecycle"

@@ -75,12 +75,19 @@ export const CATEGORY_LABELS: Record<EventCategory, string> = {
 
 // --- Breakpoint condition labels ---
 export const BREAKPOINT_LABELS: Record<BreakpointCondition, string> = {
+  always: "Always",
   on_turn: "On Turn",
   on_tool: "On Tool Call",
+  on_handoff: "On Handoff",
   on_cost: "On Cost Threshold",
   on_error: "On Error",
-  on_handoff: "On Handoff",
-  always: "Always",
+  on_score: "On Quality Score",
+  on_memory_tier_migration: "Memory Tier Migration",
+  on_conflict_detected: "Memory Conflict",
+  on_context_pressure: "Context Pressure",
+  on_memory_structure_switch: "Memory Structure Switch",
+  on_memory_link_created: "Memory Link Created",
+  on_cache_coherence_violation: "Cache Coherence Violation",
 };
 
 // --- Event store cap ---

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useRef, useEffect, useCallback, useState } from "react";
-import { GitFork, Bookmark, ChevronDown } from "lucide-react";
+import { GitFork, Bookmark, ChevronDown, RotateCcw } from "lucide-react";
 import { useEventStore } from "@/stores/eventStore";
 import { useSwarmStore } from "@/stores/swarmStore";
 import { STATE_COLORS } from "@/lib/constants";
@@ -43,9 +43,10 @@ interface SwimLaneProps {
   minTime: number;
   maxTime: number;
   totalWidth: number;
+  onFork?: (event: AgentEvent) => void;
 }
 
-function SwimLane({ agentName, agentId, events, minTime, maxTime, totalWidth }: SwimLaneProps) {
+function SwimLane({ agentName, agentId, events, minTime, maxTime, totalWidth, onFork }: SwimLaneProps) {
   const agent = useSwarmStore((s) => s.agents.get(agentId));
   const stateColor = agent ? STATE_COLORS[agent.state] : "#6B7280";
   const timeRange = maxTime - minTime || 1;
@@ -76,41 +77,70 @@ function SwimLane({ agentName, agentId, events, minTime, maxTime, totalWidth }: 
           const leftPct = ((t - minTime) / timeRange) * 100;
           const color = EVENT_COLORS[event.category];
 
-          // Checkpoint markers are special
+          // Checkpoint markers — clickable for fork/replay
           if (isCheckpoint(event)) {
             return (
               <div
                 key={event.id}
-                className="absolute top-0 bottom-0 flex items-center z-20"
+                className="absolute top-0 bottom-0 flex items-center z-20 group/cp"
                 style={{ left: `${leftPct}%` }}
-                title={`Checkpoint: ${event.payload.checkpoint_id ?? ""}`}
               >
-                <div className="flex flex-col items-center">
-                  <Bookmark size={10} style={{ color: "#8B5CF6" }} />
+                <div className="flex flex-col items-center relative">
+                  <button
+                    onClick={() => onFork?.(event)}
+                    className="hover:scale-125 transition-transform cursor-pointer"
+                    title="Fork from this checkpoint"
+                  >
+                    <Bookmark size={10} style={{ color: "#8B5CF6" }} />
+                  </button>
                   <div
                     className="w-px h-full absolute top-0"
                     style={{ backgroundColor: "#8B5CF640" }}
                   />
+                  {/* Fork action tooltip */}
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover/cp:flex items-center gap-1 z-30">
+                    <div
+                      className="rounded px-2 py-1 text-[9px] font-display font-semibold whitespace-nowrap flex items-center gap-1"
+                      style={{ backgroundColor: "#8B5CF6", color: "#0A0A0B" }}
+                    >
+                      <RotateCcw size={8} />
+                      Fork
+                    </div>
+                  </div>
                 </div>
               </div>
             );
           }
 
-          // Fork/pause markers
+          // Fork/pause markers — also clickable
           if (isFork(event)) {
             return (
               <div
                 key={event.id}
-                className="absolute top-0 bottom-0 flex items-center z-20"
+                className="absolute top-0 bottom-0 flex items-center z-20 group/fp"
                 style={{ left: `${leftPct}%` }}
-                title={`${event.type}: ${event.agentName}`}
               >
-                <div className="flex flex-col items-center">
-                  <GitFork size={10} style={{ color: "#EF4444" }} />
+                <div className="flex flex-col items-center relative">
+                  <button
+                    onClick={() => onFork?.(event)}
+                    className="hover:scale-125 transition-transform cursor-pointer"
+                    title="Fork from this breakpoint"
+                  >
+                    <GitFork size={10} style={{ color: "#EF4444" }} />
+                  </button>
                   <div
                     className="w-px h-full absolute top-0"
                     style={{ backgroundColor: "#EF444440" }}
                   />
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover/fp:flex items-center gap-1 z-30">
+                    <div
+                      className="rounded px-2 py-1 text-[9px] font-display font-semibold whitespace-nowrap flex items-center gap-1"
+                      style={{ backgroundColor: "#EF4444", color: "#0A0A0B" }}
+                    >
+                      <RotateCcw size={8} />
+                      Replay
+                    </div>
+                  </div>
                 </div>
               </div>
             );
@@ -180,11 +210,32 @@ function SwimLane({ agentName, agentId, events, minTime, maxTime, totalWidth }: 
   );
 }
 
+interface ForkTarget {
+  event: AgentEvent;
+  type: "checkpoint" | "breakpoint";
+}
+
 export function TimelinePanel() {
   const events = useEventStore((s) => s.events);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<EventCategory | "all">("all");
+  const [forkTarget, setForkTarget] = useState<ForkTarget | null>(null);
+
+  const handleFork = useCallback((event: AgentEvent) => {
+    setForkTarget({
+      event,
+      type: isCheckpoint(event) ? "checkpoint" : "breakpoint",
+    });
+  }, []);
+
+  const executeFork = useCallback(() => {
+    if (!forkTarget) return;
+    // In a real implementation, this would send a fork_from_checkpoint command
+    // via WebSocket. For now, log and provide visual feedback.
+    console.log(`[Timeline] Fork from ${forkTarget.type}:`, forkTarget.event.id);
+    setForkTarget(null);
+  }, [forkTarget]);
 
   // Filter events
   const filteredEvents = useMemo(() => {
@@ -342,10 +393,61 @@ export function TimelinePanel() {
               minTime={minTime}
               maxTime={maxTime}
               totalWidth={totalWidth}
+              onFork={handleFork}
             />
           );
         })}
       </div>
+
+      {/* Fork confirmation dialog */}
+      {forkTarget && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div
+            className="rounded-xl p-4 max-w-sm w-full mx-4 shadow-2xl"
+            style={{ backgroundColor: "#1A1A1D", border: "1px solid #222225" }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <RotateCcw size={16} style={{ color: "#8B5CF6" }} />
+              <span className="font-display text-sm font-semibold" style={{ color: "#F5F5F5" }}>
+                Fork from {forkTarget.type}
+              </span>
+            </div>
+            <p className="text-[11px] font-body mb-1" style={{ color: "#A1A1AA" }}>
+              Agent: <span style={{ color: "#F5F5F5" }}>{forkTarget.event.agentName}</span>
+            </p>
+            <p className="text-[11px] font-body mb-1" style={{ color: "#A1A1AA" }}>
+              Time: <span style={{ color: "#F5F5F5" }}>
+                {new Date(forkTarget.event.timestamp).toLocaleTimeString()}
+              </span>
+            </p>
+            {forkTarget.type === "checkpoint" && typeof forkTarget.event.payload.checkpoint_id === "string" && (
+              <p className="text-[10px] font-mono mb-3" style={{ color: "#71717A" }}>
+                ID: {forkTarget.event.payload.checkpoint_id}
+              </p>
+            )}
+            <p className="text-[10px] font-body mb-4" style={{ color: "#71717A" }}>
+              This will create a new execution branch from this point,
+              allowing you to replay with different parameters.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setForkTarget(null)}
+                className="flex-1 py-1.5 rounded-lg text-xs font-display font-semibold transition-colors"
+                style={{ backgroundColor: "#222225", color: "#A1A1AA" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeFork}
+                className="flex-1 py-1.5 rounded-lg text-xs font-display font-semibold transition-colors"
+                style={{ backgroundColor: "#8B5CF6", color: "#0A0A0B" }}
+              >
+                Fork & Replay
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import React, { useCallback, useState } from "react";
 import {
   Brain,
+  Bug,
   Clock,
   Crosshair,
   DollarSign,
@@ -18,13 +19,14 @@ import { CostPanel } from "@/components/panels/CostPanel";
 import { EventLog } from "@/components/panels/EventLog";
 import { MemoryDebugger } from "@/components/panels/MemoryDebugger";
 import { InjectionEditor } from "@/components/panels/InjectionEditor";
+import { RootCausePanel } from "@/components/panels/RootCausePanel";
 import { AnomalyBanner } from "@/components/shared/AnomalyBanner";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useEventProcessor } from "@/hooks/useEventProcessor";
 import { useAnomalyStore } from "@/stores/anomalyStore";
 import type { DashboardCommand } from "@/lib/types";
 
-type BottomTab = "timeline" | "breakpoints" | "inject" | "memory" | "cost" | "events";
+type BottomTab = "timeline" | "breakpoints" | "inject" | "memory" | "cost" | "rootcause" | "events";
 
 const BOTTOM_TABS: { id: BottomTab; label: string; icon: React.ReactNode }[] = [
   { id: "timeline", label: "Timeline", icon: <Clock size={13} /> },
@@ -32,6 +34,7 @@ const BOTTOM_TABS: { id: BottomTab; label: string; icon: React.ReactNode }[] = [
   { id: "inject", label: "Inject", icon: <Syringe size={13} /> },
   { id: "memory", label: "Memory", icon: <Brain size={13} /> },
   { id: "cost", label: "Cost", icon: <DollarSign size={13} /> },
+  { id: "rootcause", label: "Root Cause", icon: <Bug size={13} /> },
   { id: "events", label: "Events", icon: <List size={13} /> },
 ];
 
@@ -134,6 +137,8 @@ export default function DashboardPage() {
         return <MemoryDebugger />;
       case "cost":
         return <CostPanel />;
+      case "rootcause":
+        return <RootCausePanel />;
       case "events":
         return <EventLog />;
     }
