@@ -7,6 +7,7 @@ import {
   Clock,
   Crosshair,
   DollarSign,
+  GitCompare,
   List,
   Syringe,
 } from "lucide-react";
@@ -20,13 +21,16 @@ import { EventLog } from "@/components/panels/EventLog";
 import { MemoryDebugger } from "@/components/panels/MemoryDebugger";
 import { InjectionEditor } from "@/components/panels/InjectionEditor";
 import { RootCausePanel } from "@/components/panels/RootCausePanel";
+import { ComparatorPanel } from "@/components/panels/ComparatorPanel";
 import { AnomalyBanner } from "@/components/shared/AnomalyBanner";
+import { SessionBar } from "@/components/shared/SessionBar";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useEventProcessor } from "@/hooks/useEventProcessor";
 import { useAnomalyStore } from "@/stores/anomalyStore";
+import { useSessionStore } from "@/stores/sessionStore";
 import type { DashboardCommand } from "@/lib/types";
 
-type BottomTab = "timeline" | "breakpoints" | "inject" | "memory" | "cost" | "rootcause" | "events";
+type BottomTab = "timeline" | "breakpoints" | "inject" | "memory" | "cost" | "rootcause" | "comparator" | "events";
 
 const BOTTOM_TABS: { id: BottomTab; label: string; icon: React.ReactNode }[] = [
   { id: "timeline", label: "Timeline", icon: <Clock size={13} /> },
@@ -35,6 +39,7 @@ const BOTTOM_TABS: { id: BottomTab; label: string; icon: React.ReactNode }[] = [
   { id: "memory", label: "Memory", icon: <Brain size={13} /> },
   { id: "cost", label: "Cost", icon: <DollarSign size={13} /> },
   { id: "rootcause", label: "Root Cause", icon: <Bug size={13} /> },
+  { id: "comparator", label: "Comparator", icon: <GitCompare size={13} /> },
   { id: "events", label: "Events", icon: <List size={13} /> },
 ];
 
@@ -47,6 +52,10 @@ export default function DashboardPage() {
 
   const { processEvents, processTopology } = useEventProcessor();
   const pushAlert = useAnomalyStore((s) => s.pushAlert);
+  const setMySession = useSessionStore((s) => s.setMySession);
+  const addPeer = useSessionStore((s) => s.addPeer);
+  const removePeer = useSessionStore((s) => s.removePeer);
+  const updatePeerCursor = useSessionStore((s) => s.updatePeerCursor);
 
   const processAnomaly = useCallback(
     (raw: Record<string, unknown>) => {
@@ -64,10 +73,41 @@ export default function DashboardPage() {
     [pushAlert]
   );
 
+  const processSession = useCallback(
+    (payload: Record<string, unknown>) => {
+      const action = payload.action as string;
+      const sessionId = payload.session_id as string;
+      const userName = payload.user_name as string;
+      const color = payload.color as string;
+
+      if (action === "join" && payload.active_sessions) {
+        setMySession({ session_id: sessionId, user_name: userName, color });
+        const sessions = payload.active_sessions as Array<{ session_id: string; user_name: string; color: string }>;
+        for (const s of sessions) {
+          if (s.session_id !== sessionId) {
+            addPeer({ ...s, last_seen: Date.now() });
+          }
+        }
+      } else if (action === "join") {
+        addPeer({ session_id: sessionId, user_name: userName, color, last_seen: Date.now() });
+      } else if (action === "leave") {
+        removePeer(sessionId);
+      } else if (action === "cursor" || action === "selection") {
+        updatePeerCursor(
+          sessionId,
+          payload.cursor as { node_id?: string; panel?: string } | undefined,
+          payload.selected_agent_id as string | undefined,
+        );
+      }
+    },
+    [setMySession, addPeer, removePeer, updatePeerCursor]
+  );
+
   const { status, sendCommand } = useWebSocket({
     onEvent: processEvents,
     onTopology: processTopology,
     onAnomaly: processAnomaly,
+    onSession: processSession,
   });
 
   const handleSendCommand = useCallback(
@@ -139,6 +179,8 @@ export default function DashboardPage() {
         return <CostPanel />;
       case "rootcause":
         return <RootCausePanel />;
+      case "comparator":
+        return <ComparatorPanel />;
       case "events":
         return <EventLog />;
     }
@@ -157,6 +199,9 @@ export default function DashboardPage() {
 
       {/* Anomaly alerts */}
       <AnomalyBanner />
+
+      {/* Collaborative session bar */}
+      <SessionBar />
 
       {/* Main area */}
       <div className="flex-1 flex overflow-hidden min-h-0">

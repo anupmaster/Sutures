@@ -17,6 +17,8 @@ import {
   type TopologyEdge,
   type OutboundMessage,
   type DashboardCommand,
+  type SessionMessage,
+  type SessionPayload,
   type Checkpoint,
 } from './schemas.js';
 import { RingBuffer } from './ringBuffer.js';
@@ -46,6 +48,10 @@ export class EventRouter {
 
   /** Active topologies keyed by swarm_id. */
   private topologies = new Map<string, SwarmTopology>();
+
+  /** Collaborative session tracking: WebSocket → session info. */
+  private sessions = new Map<WebSocket, { session_id: string; user_name: string; color: string }>();
+  private static SESSION_COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
 
   constructor(config: EventRouterConfig = {}) {
     this.ringBuffer = new RingBuffer(config.ringBufferCapacity ?? 10_000);
@@ -83,6 +89,8 @@ export class EventRouter {
       this.handleEvent(message.payload, ws);
     } else if (message.type === 'command') {
       this.handleCommand(message, ws);
+    } else if (message.type === 'session') {
+      this.handleSession(message as SessionMessage, ws);
     }
   }
 
@@ -470,6 +478,65 @@ export class EventRouter {
 
     this.broadcastToDashboards({ type: 'event', payload: event });
     this.otelExporter.exportEvent(event);
+  }
+
+  // ── Collaborative sessions ─────────────────────────────────────
+
+  private handleSession(message: SessionMessage, ws: WebSocket): void {
+    const { action, user_name, cursor, selected_agent_id } = message.payload;
+
+    if (action === 'join') {
+      const sessionId = message.payload.session_id ?? uuidv7().slice(0, 8);
+      const color = EventRouter.SESSION_COLORS[this.sessions.size % EventRouter.SESSION_COLORS.length];
+      const name = user_name ?? `User ${this.sessions.size + 1}`;
+      this.sessions.set(ws, { session_id: sessionId, user_name: name, color });
+
+      // Send join confirmation with all active sessions
+      const activeSessions = [...this.sessions.values()];
+      this.sendToSocket(ws, {
+        type: 'session',
+        payload: { action: 'join', session_id: sessionId, user_name: name, color, active_sessions: activeSessions },
+      });
+
+      // Broadcast to other dashboards that a new user joined
+      this.broadcastSessionToOthers(ws, { action: 'join', session_id: sessionId, user_name: name, color, active_sessions: activeSessions });
+    } else if (action === 'leave') {
+      this.removeSession(ws);
+    } else if (action === 'cursor' || action === 'selection') {
+      const session = this.sessions.get(ws);
+      if (!session) return;
+      this.broadcastSessionToOthers(ws, {
+        action,
+        session_id: session.session_id,
+        user_name: session.user_name,
+        color: session.color,
+        cursor,
+        selected_agent_id,
+      });
+    }
+  }
+
+  /** Remove a session and broadcast leave to other dashboards. */
+  removeSession(ws: WebSocket): void {
+    const session = this.sessions.get(ws);
+    if (session) {
+      this.sessions.delete(ws);
+      this.broadcastSessionToOthers(ws, {
+        action: 'leave',
+        session_id: session.session_id,
+        user_name: session.user_name,
+        color: session.color,
+      });
+    }
+  }
+
+  private broadcastSessionToOthers(sourceWs: WebSocket, payload: SessionPayload): void {
+    const data = JSON.stringify({ type: 'session', payload });
+    for (const client of this.dashboardClients) {
+      if (client !== sourceWs && client.readyState === 1) {
+        client.send(data);
+      }
+    }
   }
 
   // ── WebSocket helpers ─────────────────────────────────────────

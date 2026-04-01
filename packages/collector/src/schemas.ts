@@ -189,9 +189,28 @@ export const DashboardCommandSchema = z.object({
 
 export type DashboardCommand = z.infer<typeof DashboardCommandSchema>;
 
+export const SessionMessageSchema = z.object({
+  type: z.literal('session'),
+  payload: z.object({
+    action: z.enum(['join', 'leave', 'cursor', 'selection']),
+    session_id: z.string().optional(),
+    user_name: z.string().optional(),
+    cursor: z.object({
+      node_id: z.string().optional(),
+      panel: z.string().optional(),
+      x: z.number().optional(),
+      y: z.number().optional(),
+    }).optional(),
+    selected_agent_id: z.string().optional(),
+  }),
+});
+
+export type SessionMessage = z.infer<typeof SessionMessageSchema>;
+
 export const InboundMessageSchema = z.discriminatedUnion('type', [
   AdapterMessageSchema,
   DashboardCommandSchema,
+  SessionMessageSchema,
 ]);
 
 export type InboundMessage = z.infer<typeof InboundMessageSchema>;
@@ -217,8 +236,31 @@ export interface OutboundAnomalyMessage {
   payload: AnomalyAlert;
 }
 
+export interface OutboundSessionMessage {
+  type: 'session';
+  payload: SessionPayload;
+}
+
+export interface SessionPayload {
+  /** Action: join, leave, cursor, selection */
+  action: 'join' | 'leave' | 'cursor' | 'selection';
+  /** Session ID for this dashboard client */
+  session_id: string;
+  /** User display name */
+  user_name: string;
+  /** Assigned color hex */
+  color: string;
+  /** Cursor data (node ID hovered, panel focused, etc.) */
+  cursor?: { node_id?: string; panel?: string; x?: number; y?: number };
+  /** Currently selected agent ID */
+  selected_agent_id?: string;
+  /** All active sessions (sent on join) */
+  active_sessions?: Array<{ session_id: string; user_name: string; color: string }>;
+}
+
 export type OutboundMessage =
   | OutboundEventMessage
   | OutboundResponseMessage
   | OutboundTopologyMessage
-  | OutboundAnomalyMessage;
+  | OutboundAnomalyMessage
+  | OutboundSessionMessage;

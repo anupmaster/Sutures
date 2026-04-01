@@ -225,12 +225,14 @@ function handleDashboardConnection(socket: WebSocket, router: EventRouter): void
   });
 
   socket.on('close', () => {
+    router.removeSession(socket);
     router.dashboardClients.delete(socket);
     console.log(`[Collector] Dashboard disconnected (total: ${router.dashboardClients.size})`);
   });
 
   socket.on('error', (err) => {
     console.error('[Collector] Dashboard WebSocket error:', err);
+    router.removeSession(socket);
     router.dashboardClients.delete(socket);
   });
 }

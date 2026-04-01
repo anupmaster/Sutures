@@ -9,19 +9,32 @@ import type {
 } from "@/lib/types";
 import { WS_URL, WS_BATCH_INTERVAL_MS } from "@/lib/constants";
 
+interface SessionPayload {
+  action: "join" | "leave" | "cursor" | "selection";
+  session_id: string;
+  user_name: string;
+  color: string;
+  cursor?: { node_id?: string; panel?: string; x?: number; y?: number };
+  selected_agent_id?: string;
+  active_sessions?: Array<{ session_id: string; user_name: string; color: string }>;
+}
+
 interface WebSocketHookOptions {
   onEvent?: (events: AgentEvent[]) => void;
   onTopology?: (topology: Record<string, unknown>) => void;
   onAnomaly?: (anomaly: Record<string, unknown>) => void;
+  onSession?: (payload: Record<string, unknown>) => void;
+  userName?: string;
 }
 
 interface WebSocketHook {
   status: ConnectionStatus;
   sendCommand: (command: DashboardCommand) => void;
+  sendSession: (payload: Partial<SessionPayload>) => void;
 }
 
 export function useWebSocket(options: WebSocketHookOptions): WebSocketHook {
-  const { onEvent, onTopology, onAnomaly } = options;
+  const { onEvent, onTopology, onAnomaly, onSession, userName } = options;
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
   const wsRef = useRef<WebSocket | null>(null);
   const batchRef = useRef<AgentEvent[]>([]);
@@ -36,6 +49,10 @@ export function useWebSocket(options: WebSocketHookOptions): WebSocketHook {
   onTopologyRef.current = onTopology;
   const onAnomalyRef = useRef(onAnomaly);
   onAnomalyRef.current = onAnomaly;
+  const onSessionRef = useRef(onSession);
+  onSessionRef.current = onSession;
+  const userNameRef = useRef(userName);
+  userNameRef.current = userName;
 
   const flushBatch = useCallback(() => {
     if (batchRef.current.length > 0) {
@@ -55,6 +72,11 @@ export function useWebSocket(options: WebSocketHookOptions): WebSocketHook {
     ws.onopen = () => {
       setStatus("connected");
       reconnectAttemptsRef.current = 0;
+      // Auto-join collaborative session
+      ws.send(JSON.stringify({
+        type: "session",
+        payload: { action: "join", user_name: userNameRef.current ?? `User ${Math.floor(Math.random() * 1000)}` },
+      }));
     };
 
     ws.onmessage = (event) => {
@@ -73,6 +95,8 @@ export function useWebSocket(options: WebSocketHookOptions): WebSocketHook {
           onTopologyRef.current?.(data.payload as Record<string, unknown>);
         } else if (data.type === "anomaly" && data.payload) {
           onAnomalyRef.current?.(data.payload as Record<string, unknown>);
+        } else if (data.type === "session" && data.payload) {
+          onSessionRef.current?.(data.payload as Record<string, unknown>);
         }
       } catch {
         // Ignore malformed messages
@@ -108,6 +132,12 @@ export function useWebSocket(options: WebSocketHookOptions): WebSocketHook {
     }
   }, []);
 
+  const sendSession = useCallback((payload: Partial<SessionPayload>) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "session", payload }));
+    }
+  }, []);
+
   useEffect(() => {
     connect();
 
@@ -118,5 +148,5 @@ export function useWebSocket(options: WebSocketHookOptions): WebSocketHook {
     };
   }, [connect]);
 
-  return { status, sendCommand };
+  return { status, sendCommand, sendSession };
 }
