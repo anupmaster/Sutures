@@ -18,8 +18,10 @@ import { CostPanel } from "@/components/panels/CostPanel";
 import { EventLog } from "@/components/panels/EventLog";
 import { MemoryDebugger } from "@/components/panels/MemoryDebugger";
 import { InjectionEditor } from "@/components/panels/InjectionEditor";
+import { AnomalyBanner } from "@/components/shared/AnomalyBanner";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useEventProcessor } from "@/hooks/useEventProcessor";
+import { useAnomalyStore } from "@/stores/anomalyStore";
 import type { DashboardCommand } from "@/lib/types";
 
 type BottomTab = "timeline" | "breakpoints" | "inject" | "memory" | "cost" | "events";
@@ -41,10 +43,28 @@ export default function DashboardPage() {
   const [isDraggingV, setIsDraggingV] = useState(false);
 
   const { processEvents, processTopology } = useEventProcessor();
+  const pushAlert = useAnomalyStore((s) => s.pushAlert);
+
+  const processAnomaly = useCallback(
+    (raw: Record<string, unknown>) => {
+      pushAlert({
+        type: (raw.type as string) as "infinite_loop" | "cost_spike" | "context_bloat" | "handoff_cycle",
+        agentId: (raw.agent_id as string) ?? "",
+        swarmId: (raw.swarm_id as string) ?? "",
+        message: (raw.message as string) ?? "Unknown anomaly",
+        severity: (raw.severity as string) ?? "warn",
+        detectedAt: (raw.detected_at as string) ?? new Date().toISOString(),
+        details: (raw.details as Record<string, unknown>) ?? {},
+        dismissed: false,
+      });
+    },
+    [pushAlert]
+  );
 
   const { status, sendCommand } = useWebSocket({
     onEvent: processEvents,
     onTopology: processTopology,
+    onAnomaly: processAnomaly,
   });
 
   const handleSendCommand = useCallback(
@@ -129,6 +149,9 @@ export default function DashboardPage() {
     >
       {/* Top bar */}
       <TopBar connectionStatus={status} onSendCommand={handleSendCommand} />
+
+      {/* Anomaly alerts */}
+      <AnomalyBanner />
 
       {/* Main area */}
       <div className="flex-1 flex overflow-hidden min-h-0">

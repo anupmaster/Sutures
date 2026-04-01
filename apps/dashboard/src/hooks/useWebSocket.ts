@@ -12,6 +12,7 @@ import { WS_URL, WS_BATCH_INTERVAL_MS } from "@/lib/constants";
 interface WebSocketHookOptions {
   onEvent?: (events: AgentEvent[]) => void;
   onTopology?: (topology: Record<string, unknown>) => void;
+  onAnomaly?: (anomaly: Record<string, unknown>) => void;
 }
 
 interface WebSocketHook {
@@ -20,7 +21,7 @@ interface WebSocketHook {
 }
 
 export function useWebSocket(options: WebSocketHookOptions): WebSocketHook {
-  const { onEvent, onTopology } = options;
+  const { onEvent, onTopology, onAnomaly } = options;
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
   const wsRef = useRef<WebSocket | null>(null);
   const batchRef = useRef<AgentEvent[]>([]);
@@ -33,6 +34,8 @@ export function useWebSocket(options: WebSocketHookOptions): WebSocketHook {
   onEventRef.current = onEvent;
   const onTopologyRef = useRef(onTopology);
   onTopologyRef.current = onTopology;
+  const onAnomalyRef = useRef(onAnomaly);
+  onAnomalyRef.current = onAnomaly;
 
   const flushBatch = useCallback(() => {
     if (batchRef.current.length > 0) {
@@ -68,6 +71,8 @@ export function useWebSocket(options: WebSocketHookOptions): WebSocketHook {
           }
         } else if (data.type === "topology" && data.payload) {
           onTopologyRef.current?.(data.payload as Record<string, unknown>);
+        } else if (data.type === "anomaly" && data.payload) {
+          onAnomalyRef.current?.(data.payload as Record<string, unknown>);
         }
       } catch {
         // Ignore malformed messages
