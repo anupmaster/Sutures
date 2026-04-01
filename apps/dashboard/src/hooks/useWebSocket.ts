@@ -11,7 +11,7 @@ import { WS_URL, WS_BATCH_INTERVAL_MS } from "@/lib/constants";
 
 interface WebSocketHookOptions {
   onEvent?: (events: AgentEvent[]) => void;
-  onTopology?: (topology: SwarmTopology) => void;
+  onTopology?: (topology: Record<string, unknown>) => void;
 }
 
 interface WebSocketHook {
@@ -67,7 +67,7 @@ export function useWebSocket(options: WebSocketHookOptions): WebSocketHook {
             );
           }
         } else if (data.type === "topology" && data.payload) {
-          onTopologyRef.current?.(data.payload as SwarmTopology);
+          onTopologyRef.current?.(data.payload as Record<string, unknown>);
         }
       } catch {
         // Ignore malformed messages

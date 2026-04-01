@@ -60,9 +60,9 @@ export type Severity = z.infer<typeof SeveritySchema>;
 // ── Base AgentEvent ───────────────────────────────────────────────
 
 export const AgentEventSchema = z.object({
-  event_id: z.string().uuid(),
-  swarm_id: z.string(),
-  agent_id: z.string(),
+  event_id: z.string().min(1),
+  swarm_id: z.string().min(1),
+  agent_id: z.string().min(1),
   parent_agent_id: z.string().optional(),
   timestamp: z.string(), // ISO 8601
   duration_ms: z.number().nonnegative().optional(),

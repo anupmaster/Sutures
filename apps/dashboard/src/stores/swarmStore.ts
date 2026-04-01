@@ -129,11 +129,31 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
     set((state) => ({ edges: [...state.edges, edge] })),
 
   setTopology: (agents, edges) =>
-    set(() => {
-      const agentMap = new Map<string, AgentInfo>();
-      for (const a of agents) agentMap.set(a.id, a);
-      const totalCost = agents.reduce((sum, a) => sum + a.cumulativeCost, 0);
-      return { agents: agentMap, edges, totalCost };
+    set((state) => {
+      const agentMap = new Map(state.agents);
+      for (const a of agents) {
+        const existing = agentMap.get(a.id);
+        if (existing) {
+          // Merge: topology provides name/model/state, preserve accumulated data
+          agentMap.set(a.id, {
+            ...existing,
+            name: a.name || existing.name,
+            model: a.model || existing.model,
+            // Only update state from topology if event processor hasn't set a richer state
+            state: existing.state === "idle" && a.state !== "idle" ? a.state : existing.state,
+          });
+        } else {
+          agentMap.set(a.id, a);
+        }
+      }
+      // Merge edges: add new edges from topology, keep existing event-driven edges
+      const existingEdgeIds = new Set(state.edges.map((e) => e.id));
+      const mergedEdges = [...state.edges, ...edges.filter((e) => !existingEdgeIds.has(e.id))];
+      const totalCost = Array.from(agentMap.values()).reduce(
+        (sum, a) => sum + a.cumulativeCost,
+        0
+      );
+      return { agents: agentMap, edges: mergedEdges, totalCost };
     }),
 
   setRunStartedAt: (ts) => set({ runStartedAt: ts }),

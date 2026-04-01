@@ -72,6 +72,7 @@ export class EventRouter {
 
     const result = InboundMessageSchema.safeParse(parsed);
     if (!result.success) {
+      console.error('[EventRouter] Validation error:', result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', '));
       this.sendError(ws, `Validation error: ${result.error.message}`);
       return;
     }
@@ -441,6 +442,34 @@ export class EventRouter {
   /** Get all topologies. */
   getAllTopologies(): Map<string, SwarmTopology> {
     return this.topologies;
+  }
+
+  /**
+   * Inject an event programmatically (e.g. from built-in demo).
+   * Processes through the full pipeline without needing a WebSocket source.
+   */
+  injectEvent(event: AgentEvent): void {
+    this.ringBuffer.push(event);
+    this.updateTopology(event);
+
+    if (event.event_type === 'checkpoint.created') {
+      this.handleCheckpointCreated(event);
+    }
+
+    const matches = this.breakpointController.evaluateEvent(event);
+    for (const match of matches) {
+      const hitEvent = this.breakpointController.createHitEvent(match);
+      this.ringBuffer.push(hitEvent);
+      this.broadcastToDashboards({ type: 'event', payload: hitEvent });
+    }
+
+    const anomalies = this.anomalyEngine.evaluate(event);
+    for (const anomaly of anomalies) {
+      this.broadcastToDashboards({ type: 'anomaly', payload: anomaly });
+    }
+
+    this.broadcastToDashboards({ type: 'event', payload: event });
+    this.otelExporter.exportEvent(event);
   }
 
   // ── WebSocket helpers ─────────────────────────────────────────

@@ -2,10 +2,12 @@
 
 import React, { useCallback, useState } from "react";
 import {
+  Brain,
   Clock,
   Crosshair,
   DollarSign,
   List,
+  Syringe,
 } from "lucide-react";
 import { TopBar } from "@/components/TopBar";
 import { TopologyCanvas } from "@/components/topology/TopologyCanvas";
@@ -14,15 +16,19 @@ import { TimelinePanel } from "@/components/panels/TimelinePanel";
 import { BreakpointPanel } from "@/components/panels/BreakpointPanel";
 import { CostPanel } from "@/components/panels/CostPanel";
 import { EventLog } from "@/components/panels/EventLog";
+import { MemoryDebugger } from "@/components/panels/MemoryDebugger";
+import { InjectionEditor } from "@/components/panels/InjectionEditor";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useEventProcessor } from "@/hooks/useEventProcessor";
 import type { DashboardCommand } from "@/lib/types";
 
-type BottomTab = "timeline" | "breakpoints" | "cost" | "events";
+type BottomTab = "timeline" | "breakpoints" | "inject" | "memory" | "cost" | "events";
 
 const BOTTOM_TABS: { id: BottomTab; label: string; icon: React.ReactNode }[] = [
   { id: "timeline", label: "Timeline", icon: <Clock size={13} /> },
   { id: "breakpoints", label: "Breakpoints", icon: <Crosshair size={13} /> },
+  { id: "inject", label: "Inject", icon: <Syringe size={13} /> },
+  { id: "memory", label: "Memory", icon: <Brain size={13} /> },
   { id: "cost", label: "Cost", icon: <DollarSign size={13} /> },
   { id: "events", label: "Events", icon: <List size={13} /> },
 ];
@@ -102,6 +108,10 @@ export default function DashboardPage() {
         return <TimelinePanel />;
       case "breakpoints":
         return <BreakpointPanel />;
+      case "inject":
+        return <InjectionEditor onSendCommand={handleSendCommand} />;
+      case "memory":
+        return <MemoryDebugger />;
       case "cost":
         return <CostPanel />;
       case "events":

@@ -8,7 +8,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 
 const args = process.argv.slice(2);
-const command = args[0] || 'start';
+const flags = args.filter(a => a.startsWith('--'));
+const positional = args.filter(a => !a.startsWith('--'));
+const command = positional[0] || 'start';
+const demoMode = flags.includes('--demo');
 
 const BANNER = `
   ╔═══════════════════════════════════════╗
@@ -23,20 +26,43 @@ const PORTS = {
   ui: process.env.SUTURES_UI_PORT || '9472',
 };
 
-function run(cmd, cwd, env = {}) {
-  return spawn(cmd, { shell: true, cwd, stdio: 'inherit', env: { ...process.env, ...env } });
+function run(cmd, cwd, env = {}, stdio = 'inherit') {
+  return spawn(cmd, { shell: true, cwd, stdio, env: { ...process.env, ...env } });
+}
+
+function openBrowser(url) {
+  const platform = process.platform;
+  const cmd = platform === 'darwin' ? 'open' : platform === 'win32' ? 'start' : 'xdg-open';
+  spawn(cmd, [url], { shell: true, stdio: 'ignore', detached: true }).unref();
+}
+
+async function waitForServer(url, maxAttempts = 20) {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return true;
+    } catch {}
+    await new Promise(r => setTimeout(r, 500));
+  }
+  return false;
+}
+
+async function runSimulator() {
+  console.log('\n  Running demo simulation (3-agent research swarm)...\n');
+  return run('python3 examples/playground/simulate.py', root);
 }
 
 function printHelp() {
   console.log(BANNER);
   console.log('Usage: sutures [command]\n');
   console.log('Commands:');
-  console.log('  start       Start collector + dashboard (default)');
-  console.log('  collector   Start collector server only');
-  console.log('  dashboard   Start dashboard UI only');
-  console.log('  mcp         Start MCP server (stdio)');
-  console.log('  version     Show version');
-  console.log('  help        Show this help\n');
+  console.log('  start         Start collector + dashboard + open browser (default)');
+  console.log('  start --demo  Start everything + run demo simulation');
+  console.log('  collector     Start collector server only');
+  console.log('  dashboard     Start dashboard UI only');
+  console.log('  mcp           Start MCP server (stdio)');
+  console.log('  version       Show version');
+  console.log('  help          Show this help\n');
   console.log('Ports:');
   console.log(`  WebSocket:  ${PORTS.ws}`);
   console.log(`  HTTP API:   ${PORTS.http}`);
@@ -83,10 +109,33 @@ switch (command) {
     console.log(BANNER);
     const collector = await startCollector();
     processes.push(collector);
-    // Give collector 2s to start before dashboard
-    await new Promise(r => setTimeout(r, 2000));
+
+    // Wait for collector to be ready
+    const collectorReady = await waitForServer(`http://localhost:${PORTS.http}/health`);
+    if (!collectorReady) {
+      console.error('  ✗ Collector failed to start');
+      cleanup();
+      break;
+    }
+    console.log('  ✓ Collector ready');
+
     const dashboard = await startDashboard();
     processes.push(dashboard);
+
+    // Wait for dashboard to be ready, then open browser
+    const dashReady = await waitForServer(`http://localhost:${PORTS.ui}`);
+    if (dashReady) {
+      console.log('  ✓ Dashboard ready');
+      console.log(`\n  Opening http://localhost:${PORTS.ui} ...\n`);
+      openBrowser(`http://localhost:${PORTS.ui}`);
+    }
+
+    // If --demo flag, run the simulator after a brief pause
+    if (demoMode) {
+      await new Promise(r => setTimeout(r, 1000));
+      const sim = await runSimulator();
+      processes.push(sim);
+    }
     break;
   }
   case 'collector': {

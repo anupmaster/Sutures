@@ -18,9 +18,13 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "test": "turbo test",
-    "clean": "turbo clean"
+    "clean": "turbo clean",
+    "collector": "node packages/collector/dist/index.js",
+    "dashboard": "apps/dashboard/node_modules/.bin/next start apps/dashboard -p 9472",
+    "simulate": "python3 examples/playground/simulate.py"
   },
   "devDependencies": {
+    "tsx": "^4.21.0",
     "turbo": "^2.4.0",
     "typescript": "^5.6.0"
   },

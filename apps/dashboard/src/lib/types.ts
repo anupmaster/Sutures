@@ -121,3 +121,56 @@ export interface SwarmSummary {
   totalCost: number;
   startedAt: string;
 }
+
+// ── Memory Debugger Types ────────────────────────────
+
+export type MemoryTier = "stm" | "mtm" | "ltm";
+
+export interface MemoryEntry {
+  key: string;
+  value: string;
+  tier: MemoryTier;
+  heat: number; // 0-1, for pruning heatmap
+  lastAccessed: string;
+  createdAt: string;
+  agentId: string;
+  shared: boolean;
+}
+
+export interface MemoryTierSummary {
+  tier: MemoryTier;
+  entryCount: number;
+  totalTokens: number;
+  maxTokens: number;
+}
+
+export interface ContextPressure {
+  agentId: string;
+  usedTokens: number;
+  maxTokens: number;
+  percentage: number; // 0-100
+}
+
+export interface SharedMemoryKey {
+  key: string;
+  ownerAgentId: string;
+  readerAgentIds: string[];
+  lastUpdated: string;
+  stale: boolean; // true if readers have outdated version
+}
+
+export interface MemoryMigrationEvent {
+  key: string;
+  fromTier: MemoryTier;
+  toTier: MemoryTier;
+  agentId: string;
+  reason: string;
+  timestamp: string;
+}
+
+export interface MemoryConflict {
+  key: string;
+  agentIds: string[];
+  values: string[];
+  timestamp: string;
+}
