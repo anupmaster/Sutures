@@ -26,6 +26,7 @@ import { CheckpointStore } from './checkpointStore.js';
 import { BreakpointController } from './breakpointController.js';
 import { AnomalyEngine } from './anomalyEngine.js';
 import { OtelExporter } from './otelExporter.js';
+import { CommandRegistry, type CommandHandlerContext } from './commandRegistry.js';
 
 export interface EventRouterConfig {
   ringBufferCapacity?: number;
@@ -40,6 +41,7 @@ export class EventRouter {
   readonly breakpointController: BreakpointController;
   readonly anomalyEngine: AnomalyEngine;
   readonly otelExporter: OtelExporter;
+  readonly commandRegistry: CommandRegistry;
 
   /** Connected adapter WebSockets. */
   readonly adapterClients = new Set<WebSocket>();
@@ -62,6 +64,8 @@ export class EventRouter {
       endpoint: config.otelEndpoint,
       enabled: config.otelEnabled ?? false,
     });
+    this.commandRegistry = new CommandRegistry();
+    this.registerBuiltInCommands();
   }
 
   /**
@@ -139,50 +143,74 @@ export class EventRouter {
 
   /**
    * Handle a command message from a dashboard client.
+   * Dispatches via the CommandRegistry (supports built-in + plugin commands).
    */
   private handleCommand(command: DashboardCommand, ws: WebSocket): void {
     const payload = command.payload ?? {};
+    const handler = this.commandRegistry.get(command.command);
 
-    switch (command.command) {
-      case 'set_breakpoint':
-        this.handleSetBreakpoint(payload, ws);
-        break;
-      case 'release_breakpoint':
-        this.handleReleaseBreakpoint(payload, ws);
-        break;
-      case 'inject_and_resume':
-        this.handleInjectAndResume(payload, ws);
-        break;
-      case 'get_checkpoints':
-        this.handleGetCheckpoints(payload, ws);
-        break;
-      case 'fork_from_checkpoint':
-        this.handleForkFromCheckpoint(payload, ws);
-        break;
-      case 'get_topology':
-        this.handleGetTopology(payload, ws);
-        break;
-      case 'get_events':
-        this.handleGetEvents(payload, ws);
-        break;
-      case 'pause_all':
-        this.handlePauseAll(payload, ws);
-        break;
-      case 'resume_all':
-        this.handleResumeAll(payload, ws);
-        break;
+    if (handler) {
+      const ctx: CommandHandlerContext = {
+        sendResponse: (cmd, data) => this.sendResponse(ws, cmd, data),
+        broadcastToDashboards: (msg) => this.broadcastToDashboards(msg as OutboundMessage),
+        broadcastToAdapters: (msg) => this.broadcastToAdapters(msg as OutboundMessage),
+      };
+      void handler.handler(payload, ctx);
     }
   }
 
-  private handleSetBreakpoint(payload: Record<string, unknown>, ws: WebSocket): void {
+  /**
+   * Register all built-in commands into the CommandRegistry.
+   */
+  private registerBuiltInCommands(): void {
+    const self = this;
+
+    this.commandRegistry.register({
+      name: 'set_breakpoint',
+      handler(payload, ctx) { self.handleSetBreakpoint(payload, ctx); },
+    });
+    this.commandRegistry.register({
+      name: 'release_breakpoint',
+      handler(payload, ctx) { self.handleReleaseBreakpoint(payload, ctx); },
+    });
+    this.commandRegistry.register({
+      name: 'inject_and_resume',
+      handler(payload, ctx) { self.handleInjectAndResume(payload, ctx); },
+    });
+    this.commandRegistry.register({
+      name: 'get_checkpoints',
+      handler(payload, ctx) { self.handleGetCheckpoints(payload, ctx); },
+    });
+    this.commandRegistry.register({
+      name: 'fork_from_checkpoint',
+      handler(payload, ctx) { self.handleForkFromCheckpoint(payload, ctx); },
+    });
+    this.commandRegistry.register({
+      name: 'get_topology',
+      handler(payload, ctx) { self.handleGetTopology(payload, ctx); },
+    });
+    this.commandRegistry.register({
+      name: 'get_events',
+      handler(payload, ctx) { self.handleGetEvents(payload, ctx); },
+    });
+    this.commandRegistry.register({
+      name: 'pause_all',
+      handler(payload, ctx) { self.handlePauseAll(payload, ctx); },
+    });
+    this.commandRegistry.register({
+      name: 'resume_all',
+      handler(payload, ctx) { self.handleResumeAll(payload, ctx); },
+    });
+  }
+
+  private handleSetBreakpoint(payload: Record<string, unknown>, ctx: CommandHandlerContext): void {
     const result = BreakpointConfigSchema.safeParse(payload);
     if (!result.success) {
-      this.sendResponse(ws, 'set_breakpoint', { error: result.error.message });
+      ctx.sendResponse('set_breakpoint', { error: result.error.message });
       return;
     }
     const id = this.breakpointController.setBreakpoint(result.data);
 
-    // Broadcast a breakpoint.set event
     const setEvent: AgentEvent = {
       event_id: uuidv7(),
       swarm_id: result.data.swarm_id ?? '*',
@@ -200,19 +228,18 @@ export class EventRouter {
     this.ringBuffer.push(setEvent);
     this.broadcastToDashboards({ type: 'event', payload: setEvent });
 
-    this.sendResponse(ws, 'set_breakpoint', { breakpoint_id: id });
+    ctx.sendResponse('set_breakpoint', { breakpoint_id: id });
   }
 
-  private handleReleaseBreakpoint(payload: Record<string, unknown>, ws: WebSocket): void {
+  private handleReleaseBreakpoint(payload: Record<string, unknown>, ctx: CommandHandlerContext): void {
     const id = typeof payload['breakpoint_id'] === 'string' ? payload['breakpoint_id'] : null;
     if (!id) {
-      this.sendResponse(ws, 'release_breakpoint', { error: 'breakpoint_id required' });
+      ctx.sendResponse('release_breakpoint', { error: 'breakpoint_id required' });
       return;
     }
     const removed = this.breakpointController.releaseBreakpoint(id);
 
     if (removed) {
-      // Broadcast a breakpoint.release event
       const releaseEvent: AgentEvent = {
         event_id: uuidv7(),
         swarm_id: '*',
@@ -227,13 +254,13 @@ export class EventRouter {
       this.broadcastToDashboards({ type: 'event', payload: releaseEvent });
     }
 
-    this.sendResponse(ws, 'release_breakpoint', { removed });
+    ctx.sendResponse('release_breakpoint', { removed });
   }
 
-  private handleInjectAndResume(payload: Record<string, unknown>, ws: WebSocket): void {
+  private handleInjectAndResume(payload: Record<string, unknown>, ctx: CommandHandlerContext): void {
     const agentId = typeof payload['agent_id'] === 'string' ? payload['agent_id'] : null;
     if (!agentId) {
-      this.sendResponse(ws, 'inject_and_resume', { error: 'agent_id required' });
+      ctx.sendResponse('inject_and_resume', { error: 'agent_id required' });
       return;
     }
 
@@ -246,10 +273,8 @@ export class EventRouter {
       resume: true,
     });
 
-    // Include mode in the injection event data so adapters know how to apply it
     (injectionEvent.data as Record<string, unknown>).mode = mode;
 
-    // Fill in swarm_id from topology if available
     for (const [swarmId, topo] of this.topologies) {
       if (topo.agents[agentId]) {
         injectionEvent.swarm_id = swarmId;
@@ -257,37 +282,35 @@ export class EventRouter {
       }
     }
 
-    // Broadcast injection to the adapter that owns this agent
     this.broadcastToAdapters({ type: 'event', payload: injectionEvent });
     this.ringBuffer.push(injectionEvent);
     this.broadcastToDashboards({ type: 'event', payload: injectionEvent });
 
-    this.sendResponse(ws, 'inject_and_resume', { event_id: injectionEvent.event_id });
+    ctx.sendResponse('inject_and_resume', { event_id: injectionEvent.event_id });
   }
 
-  private handleGetCheckpoints(payload: Record<string, unknown>, ws: WebSocket): void {
+  private handleGetCheckpoints(payload: Record<string, unknown>, ctx: CommandHandlerContext): void {
     const threadId = typeof payload['thread_id'] === 'string' ? payload['thread_id'] : null;
     if (!threadId) {
-      this.sendResponse(ws, 'get_checkpoints', { error: 'thread_id required' });
+      ctx.sendResponse('get_checkpoints', { error: 'thread_id required' });
       return;
     }
     const checkpoints = this.checkpointStore.getByThreadId(threadId);
-    this.sendResponse(ws, 'get_checkpoints', { checkpoints });
+    ctx.sendResponse('get_checkpoints', { checkpoints });
   }
 
-  private handleForkFromCheckpoint(payload: Record<string, unknown>, ws: WebSocket): void {
+  private handleForkFromCheckpoint(payload: Record<string, unknown>, ctx: CommandHandlerContext): void {
     const checkpointId = typeof payload['checkpoint_id'] === 'string' ? payload['checkpoint_id'] : null;
     if (!checkpointId) {
-      this.sendResponse(ws, 'fork_from_checkpoint', { error: 'checkpoint_id required' });
+      ctx.sendResponse('fork_from_checkpoint', { error: 'checkpoint_id required' });
       return;
     }
     const checkpoint = this.checkpointStore.getById(checkpointId);
     if (!checkpoint) {
-      this.sendResponse(ws, 'fork_from_checkpoint', { error: 'Checkpoint not found' });
+      ctx.sendResponse('fork_from_checkpoint', { error: 'Checkpoint not found' });
       return;
     }
 
-    // Create a forked checkpoint with a new ID
     const forkedCheckpoint: Checkpoint = {
       checkpoint_id: uuidv7(),
       thread_id: `${checkpoint.thread_id}:fork:${uuidv7().slice(0, 8)}`,
@@ -300,22 +323,21 @@ export class EventRouter {
     };
     this.checkpointStore.save(forkedCheckpoint);
 
-    this.sendResponse(ws, 'fork_from_checkpoint', { checkpoint: forkedCheckpoint });
+    ctx.sendResponse('fork_from_checkpoint', { checkpoint: forkedCheckpoint });
   }
 
-  private handleGetTopology(payload: Record<string, unknown>, ws: WebSocket): void {
+  private handleGetTopology(payload: Record<string, unknown>, ctx: CommandHandlerContext): void {
     const swarmId = typeof payload['swarm_id'] === 'string' ? payload['swarm_id'] : null;
     if (swarmId) {
       const topo = this.topologies.get(swarmId);
-      this.sendResponse(ws, 'get_topology', { topology: topo ?? null });
+      ctx.sendResponse('get_topology', { topology: topo ?? null });
     } else {
-      // Return all topologies
       const all = Object.fromEntries(this.topologies);
-      this.sendResponse(ws, 'get_topology', { topologies: all });
+      ctx.sendResponse('get_topology', { topologies: all });
     }
   }
 
-  private handleGetEvents(payload: Record<string, unknown>, ws: WebSocket): void {
+  private handleGetEvents(payload: Record<string, unknown>, ctx: CommandHandlerContext): void {
     const swarmId = typeof payload['swarm_id'] === 'string' ? payload['swarm_id'] : null;
     const agentId = typeof payload['agent_id'] === 'string' ? payload['agent_id'] : null;
     const limit = typeof payload['limit'] === 'number' ? payload['limit'] : 100;
@@ -329,15 +351,14 @@ export class EventRouter {
       events = this.ringBuffer.getRecent(limit);
     }
 
-    // Apply limit
     if (events.length > limit) {
       events = events.slice(-limit);
     }
 
-    this.sendResponse(ws, 'get_events', { events });
+    ctx.sendResponse('get_events', { events });
   }
 
-  private handlePauseAll(payload: Record<string, unknown>, ws: WebSocket): void {
+  private handlePauseAll(payload: Record<string, unknown>, ctx: CommandHandlerContext): void {
     const swarmId = typeof payload['swarm_id'] === 'string' ? payload['swarm_id'] : null;
     const pauseEvent: AgentEvent = {
       event_id: uuidv7(),
@@ -352,10 +373,10 @@ export class EventRouter {
     this.broadcastToAdapters({ type: 'event', payload: pauseEvent });
     this.ringBuffer.push(pauseEvent);
     this.broadcastToDashboards({ type: 'event', payload: pauseEvent });
-    this.sendResponse(ws, 'pause_all', { status: 'ok' });
+    ctx.sendResponse('pause_all', { status: 'ok' });
   }
 
-  private handleResumeAll(payload: Record<string, unknown>, ws: WebSocket): void {
+  private handleResumeAll(payload: Record<string, unknown>, ctx: CommandHandlerContext): void {
     const swarmId = typeof payload['swarm_id'] === 'string' ? payload['swarm_id'] : null;
     const resumeEvent: AgentEvent = {
       event_id: uuidv7(),
@@ -370,7 +391,7 @@ export class EventRouter {
     this.broadcastToAdapters({ type: 'event', payload: resumeEvent });
     this.ringBuffer.push(resumeEvent);
     this.broadcastToDashboards({ type: 'event', payload: resumeEvent });
-    this.sendResponse(ws, 'resume_all', { status: 'ok' });
+    ctx.sendResponse('resume_all', { status: 'ok' });
   }
 
   /**

@@ -1,50 +1,24 @@
 "use client";
 
-import React, { useCallback, useState } from "react";
-import {
-  Brain,
-  Bug,
-  Clock,
-  Crosshair,
-  DollarSign,
-  GitCompare,
-  List,
-  Syringe,
-} from "lucide-react";
+import React, { useCallback, useMemo, useState } from "react";
 import { TopBar } from "@/components/TopBar";
 import { TopologyCanvas } from "@/components/topology/TopologyCanvas";
 import { AgentInspector } from "@/components/inspector/AgentInspector";
-import { TimelinePanel } from "@/components/panels/TimelinePanel";
-import { BreakpointPanel } from "@/components/panels/BreakpointPanel";
-import { CostPanel } from "@/components/panels/CostPanel";
-import { EventLog } from "@/components/panels/EventLog";
-import { MemoryDebugger } from "@/components/panels/MemoryDebugger";
-import { InjectionEditor } from "@/components/panels/InjectionEditor";
-import { RootCausePanel } from "@/components/panels/RootCausePanel";
-import { ComparatorPanel } from "@/components/panels/ComparatorPanel";
 import { AnomalyBanner } from "@/components/shared/AnomalyBanner";
 import { SessionBar } from "@/components/shared/SessionBar";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useEventProcessor } from "@/hooks/useEventProcessor";
 import { useAnomalyStore } from "@/stores/anomalyStore";
 import { useSessionStore } from "@/stores/sessionStore";
+import { panelRegistry } from "@/plugins/panelRegistry";
+import { registerBuiltInPanels } from "@/plugins/registerBuiltInPanels";
 import type { DashboardCommand } from "@/lib/types";
 
-type BottomTab = "timeline" | "breakpoints" | "inject" | "memory" | "cost" | "rootcause" | "comparator" | "events";
-
-const BOTTOM_TABS: { id: BottomTab; label: string; icon: React.ReactNode }[] = [
-  { id: "timeline", label: "Timeline", icon: <Clock size={13} /> },
-  { id: "breakpoints", label: "Breakpoints", icon: <Crosshair size={13} /> },
-  { id: "inject", label: "Inject", icon: <Syringe size={13} /> },
-  { id: "memory", label: "Memory", icon: <Brain size={13} /> },
-  { id: "cost", label: "Cost", icon: <DollarSign size={13} /> },
-  { id: "rootcause", label: "Root Cause", icon: <Bug size={13} /> },
-  { id: "comparator", label: "Comparator", icon: <GitCompare size={13} /> },
-  { id: "events", label: "Events", icon: <List size={13} /> },
-];
+// Register built-in panels once at module load
+registerBuiltInPanels();
 
 export default function DashboardPage() {
-  const [bottomTab, setBottomTab] = useState<BottomTab>("events");
+  const [bottomTab, setBottomTab] = useState("events");
   const [bottomHeight, setBottomHeight] = useState(220);
   const [rightWidth, setRightWidth] = useState(380);
   const [isDraggingH, setIsDraggingH] = useState(false);
@@ -165,25 +139,13 @@ export default function DashboardPage() {
     [bottomHeight]
   );
 
+  const registeredPanels = useMemo(() => panelRegistry.all(), []);
+
   const renderBottomPanel = () => {
-    switch (bottomTab) {
-      case "timeline":
-        return <TimelinePanel onSendCommand={handleSendCommand} />;
-      case "breakpoints":
-        return <BreakpointPanel onSendCommand={handleSendCommand} />;
-      case "inject":
-        return <InjectionEditor onSendCommand={handleSendCommand} />;
-      case "memory":
-        return <MemoryDebugger />;
-      case "cost":
-        return <CostPanel />;
-      case "rootcause":
-        return <RootCausePanel />;
-      case "comparator":
-        return <ComparatorPanel />;
-      case "events":
-        return <EventLog />;
-    }
+    const panel = panelRegistry.get(bottomTab);
+    if (!panel) return null;
+    const PanelComponent = panel.component;
+    return <PanelComponent onSendCommand={handleSendCommand as (cmd: unknown) => void} />;
   };
 
   return (
@@ -231,21 +193,21 @@ export default function DashboardPage() {
                 borderColor: "#222225",
               }}
             >
-              {BOTTOM_TABS.map((tab) => (
+              {registeredPanels.map((panel) => (
                 <button
-                  key={tab.id}
-                  onClick={() => setBottomTab(tab.id)}
+                  key={panel.id}
+                  onClick={() => setBottomTab(panel.id)}
                   className="flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-display font-medium uppercase tracking-wider transition-colors"
                   style={{
-                    color: bottomTab === tab.id ? "#10B981" : "#71717A",
+                    color: bottomTab === panel.id ? "#10B981" : "#71717A",
                     borderBottom:
-                      bottomTab === tab.id
+                      bottomTab === panel.id
                         ? "2px solid #10B981"
                         : "2px solid transparent",
                   }}
                 >
-                  {tab.icon}
-                  {tab.label}
+                  {panel.icon}
+                  {panel.label}
                 </button>
               ))}
             </div>

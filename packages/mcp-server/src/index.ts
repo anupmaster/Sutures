@@ -25,6 +25,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { CollectorClient } from './collector-client.js';
+import { ToolRegistry } from './toolRegistry.js';
 import {
   handleListAgents,
   handleGetAgentState,
@@ -464,71 +465,48 @@ const TOOLS = [
   },
 ];
 
-// ── Tool Dispatch ────────────────────────────────────────────────
+// ── Tool Registry Setup ─────────────────────────────────────────
 
-type ToolResult = { content: Array<{ type: 'text'; text: string }> };
+function createToolRegistry(client: CollectorClient): ToolRegistry {
+  const registry = new ToolRegistry();
 
-async function dispatch(
-  client: CollectorClient,
-  toolName: string,
-  args: Record<string, unknown>,
-): Promise<ToolResult> {
-  switch (toolName) {
-    // Topology
-    case 'list_agents':
-      return handleListAgents(client, args as unknown as ListAgentsInput);
-    case 'get_agent_state':
-      return handleGetAgentState(client, args as unknown as GetAgentStateInput);
-    case 'get_topology':
-      return handleGetTopology(client, args as unknown as GetTopologyInput);
-    case 'get_errors':
-      return handleGetErrors(client, args as unknown as GetErrorsInput);
-    case 'get_swarm_summary':
-      return handleGetSwarmSummary(client, args as unknown as GetSwarmSummaryInput);
+  // Register all 18 built-in tools: pair each TOOLS definition with its handler
+  const handlerMap: Record<string, (args: Record<string, unknown>) => Promise<{ content: Array<{ type: 'text'; text: string }> }>> = {
+    list_agents: (args) => handleListAgents(client, args as unknown as ListAgentsInput),
+    get_agent_state: (args) => handleGetAgentState(client, args as unknown as GetAgentStateInput),
+    get_topology: (args) => handleGetTopology(client, args as unknown as GetTopologyInput),
+    get_errors: (args) => handleGetErrors(client, args as unknown as GetErrorsInput),
+    get_swarm_summary: (args) => handleGetSwarmSummary(client, args as unknown as GetSwarmSummaryInput),
+    get_context_window: (args) => handleGetContextWindow(client, args as unknown as GetContextWindowInput),
+    get_memory_hierarchy: (args) => handleGetMemoryHierarchy(client, args as unknown as GetMemoryHierarchyInput),
+    get_shared_memory_map: (args) => handleGetSharedMemoryMap(client, args as unknown as GetSharedMemoryMapInput),
+    get_memory_traversal_path: (args) => handleGetMemoryTraversalPath(client, args as unknown as GetMemoryTraversalPathInput),
+    simulate_prune: (args) => handleSimulatePrune(client, args as unknown as SimulatePruneInput),
+    set_breakpoint: (args) => handleSetBreakpoint(client, args as unknown as SetBreakpointInput),
+    release_breakpoint: (args) => handleReleaseBreakpoint(client, args as unknown as ReleaseBreakpointInput),
+    inject_and_resume: (args) => handleInjectAndResume(client, args as unknown as InjectAndResumeInput),
+    get_checkpoints: (args) => handleGetCheckpoints(client, args as unknown as GetCheckpointsInput),
+    fork_from_checkpoint: (args) => handleForkFromCheckpoint(client, args as unknown as ForkFromCheckpointInput),
+    get_root_cause: (args) => handleGetRootCause(client, args as unknown as GetRootCauseInput),
+    get_cost_breakdown: (args) => handleGetCostBreakdown(client, args as unknown as GetCostBreakdownInput),
+    export_trace: (args) => handleExportTrace(client, args as unknown as ExportTraceInput),
+  };
 
-    // Memory
-    case 'get_context_window':
-      return handleGetContextWindow(client, args as unknown as GetContextWindowInput);
-    case 'get_memory_hierarchy':
-      return handleGetMemoryHierarchy(client, args as unknown as GetMemoryHierarchyInput);
-    case 'get_shared_memory_map':
-      return handleGetSharedMemoryMap(client, args as unknown as GetSharedMemoryMapInput);
-    case 'get_memory_traversal_path':
-      return handleGetMemoryTraversalPath(client, args as unknown as GetMemoryTraversalPathInput);
-    case 'simulate_prune':
-      return handleSimulatePrune(client, args as unknown as SimulatePruneInput);
-
-    // Breakpoints
-    case 'set_breakpoint':
-      return handleSetBreakpoint(client, args as unknown as SetBreakpointInput);
-    case 'release_breakpoint':
-      return handleReleaseBreakpoint(client, args as unknown as ReleaseBreakpointInput);
-    case 'inject_and_resume':
-      return handleInjectAndResume(client, args as unknown as InjectAndResumeInput);
-    case 'get_checkpoints':
-      return handleGetCheckpoints(client, args as unknown as GetCheckpointsInput);
-    case 'fork_from_checkpoint':
-      return handleForkFromCheckpoint(client, args as unknown as ForkFromCheckpointInput);
-
-    // Analysis
-    case 'get_root_cause':
-      return handleGetRootCause(client, args as unknown as GetRootCauseInput);
-    case 'get_cost_breakdown':
-      return handleGetCostBreakdown(client, args as unknown as GetCostBreakdownInput);
-    case 'export_trace':
-      return handleExportTrace(client, args as unknown as ExportTraceInput);
-
-    default:
-      return {
-        content: [{ type: 'text', text: `Unknown tool: ${toolName}` }],
-      };
+  for (const tool of TOOLS) {
+    const handler = handlerMap[tool.name] as ((args: Record<string, unknown>) => Promise<{ content: Array<{ type: 'text'; text: string }> }>) | undefined;
+    if (handler != null) {
+      registry.register({ ...tool, inputSchema: tool.inputSchema as Record<string, unknown>, handler });
+    }
   }
+
+  return registry;
 }
 
 // ── Server Setup ─────────────────────────────────────────────────
 
 async function main(): Promise<void> {
   const client = new CollectorClient();
+  const toolRegistry = createToolRegistry(client);
 
   const server = new Server(
     {
@@ -542,18 +520,19 @@ async function main(): Promise<void> {
     },
   );
 
-  // Register tool listing
+  // Register tool listing — returns all registered tools (built-in + plugins)
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: TOOLS,
+    tools: toolRegistry.listDefinitions(),
   }));
 
-  // Register tool execution
+  // Register tool execution — dispatches via ToolRegistry
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const toolName = request.params.name;
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
 
     try {
-      return await dispatch(client, toolName, args);
+      const result = await toolRegistry.dispatch(toolName, args);
+      return { ...result } as Record<string, unknown>;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return {

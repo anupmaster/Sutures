@@ -1,0 +1,9 @@
+{
+  "name": "sutures-plugin-hello",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Example Sutures plugin — adds a Hello World panel and MCP tool",
+  "main": "src/index.js",
+  "keywords": ["sutures", "sutures-plugin", "agent-debugging"],
+  "license": "Apache-2.0"
+}

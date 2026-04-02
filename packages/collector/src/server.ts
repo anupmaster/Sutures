@@ -11,6 +11,7 @@ import fastifyCors from '@fastify/cors';
 import type { WebSocket } from 'ws';
 import { v7 as uuidv7 } from 'uuid';
 import { EventRouter, type EventRouterConfig } from './eventRouter.js';
+import { loadPlugins } from './pluginLoader.js';
 import type { AgentEvent } from './schemas.js';
 
 export interface CollectorServerConfig extends EventRouterConfig {
@@ -154,6 +155,13 @@ export function createCollectorServer(config: CollectorServerConfig = {}): Colle
     async start() {
       await wsSetupPromise;
       await httpSetupPromise;
+
+      // Load plugins before starting servers
+      const plugins = await loadPlugins(router);
+      if (plugins.length > 0) {
+        console.log(`[Collector] Loaded ${plugins.length} plugin(s): ${plugins.join(', ')}`);
+      }
+
       await wsServer.listen({ port: wsPort, host });
       await httpServer.listen({ port: httpPort, host });
       console.log(`[Collector] WebSocket server listening on ws://${host}:${wsPort}`);

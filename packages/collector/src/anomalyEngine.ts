@@ -9,6 +9,7 @@
  */
 
 import type { AgentEvent, AnomalyAlert } from './schemas.js';
+import { DetectorRegistry, type AnomalyDetector } from './detectorRegistry.js';
 
 /** Tracks recent tool calls per agent for loop detection. */
 interface ToolCallTracker {
@@ -39,31 +40,47 @@ const CONTEXT_BLOAT_RATE = 0.10;
 const HANDOFF_CYCLE_LENGTH = 4;
 
 export class AnomalyEngine {
+  readonly detectorRegistry: DetectorRegistry;
   private toolCalls = new Map<string, ToolCallTracker>();
   private costTrackers = new Map<string, CostTracker>();
   private contextTrackers = new Map<string, ContextTracker>();
   private handoffTrackers = new Map<string, HandoffTracker>();
 
+  constructor() {
+    this.detectorRegistry = new DetectorRegistry();
+    this.registerBuiltInDetectors();
+  }
+
+  private registerBuiltInDetectors(): void {
+    const self = this;
+    this.detectorRegistry.register({
+      name: 'infinite_loop',
+      evaluate: (event) => { const r = self.detectLoop(event); return r ? [r] : []; },
+      clear: () => self.toolCalls.clear(),
+    });
+    this.detectorRegistry.register({
+      name: 'cost_spike',
+      evaluate: (event) => { const r = self.detectCostSpike(event); return r ? [r] : []; },
+      clear: () => self.costTrackers.clear(),
+    });
+    this.detectorRegistry.register({
+      name: 'context_bloat',
+      evaluate: (event) => { const r = self.detectContextBloat(event); return r ? [r] : []; },
+      clear: () => self.contextTrackers.clear(),
+    });
+    this.detectorRegistry.register({
+      name: 'handoff_cycle',
+      evaluate: (event) => { const r = self.detectHandoffCycle(event); return r ? [r] : []; },
+      clear: () => self.handoffTrackers.clear(),
+    });
+  }
+
   /**
    * Process an event and return any anomaly alerts detected.
-   * May return multiple alerts for a single event.
+   * Runs all registered detectors (built-in + plugins).
    */
   evaluate(event: AgentEvent): AnomalyAlert[] {
-    const alerts: AnomalyAlert[] = [];
-
-    const loop = this.detectLoop(event);
-    if (loop) alerts.push(loop);
-
-    const costSpike = this.detectCostSpike(event);
-    if (costSpike) alerts.push(costSpike);
-
-    const bloat = this.detectContextBloat(event);
-    if (bloat) alerts.push(bloat);
-
-    const cycle = this.detectHandoffCycle(event);
-    if (cycle) alerts.push(cycle);
-
-    return alerts;
+    return this.detectorRegistry.evaluateAll(event);
   }
 
   /**
@@ -262,12 +279,9 @@ export class AnomalyEngine {
     return null;
   }
 
-  /** Reset all tracking state. */
+  /** Reset all tracking state (built-in + plugin detectors). */
   clear(): void {
-    this.toolCalls.clear();
-    this.costTrackers.clear();
-    this.contextTrackers.clear();
-    this.handoffTrackers.clear();
+    this.detectorRegistry.clearAll();
   }
 
   private extractString(data: Record<string, unknown>, key: string): string | null {

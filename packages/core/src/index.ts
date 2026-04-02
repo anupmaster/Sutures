@@ -104,6 +104,21 @@ export type {
   OtelSpanEvent,
 } from './types.js';
 
+// Plugin system
+export type {
+  SuturesPlugin,
+  SuturesConfig,
+  PluginEntry,
+  PluginContext,
+  PanelDefinition,
+  ToolDefinition,
+  ToolResult,
+  CommandDefinition,
+  CommandContext,
+  AnomalyDetectorDefinition,
+  AnomalyAlert,
+} from './plugin.js';
+
 // Client
 export { SuturesClient, createSutures } from './client.js';
 export type { BreakpointHandler } from './client.js';
