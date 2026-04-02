@@ -279,6 +279,13 @@ export interface ExportTraceInput {
   limit?: number;
 }
 
+export interface ExportTestFixtureInput {
+  swarm_id?: string;
+  agent_id?: string;
+  format: 'pytest' | 'vitest';
+  output_path?: string;
+}
+
 // ── Shadow Tool Input Types ─────────────────────────────────────
 
 export interface SpawnShadowInput {

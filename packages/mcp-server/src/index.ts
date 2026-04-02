@@ -51,6 +51,7 @@ import {
   handleGetRootCause,
   handleGetCostBreakdown,
   handleExportTrace,
+  handleExportTestFixture,
 } from './tools/analysis.js';
 import {
   handleSpawnShadow,
@@ -77,6 +78,7 @@ import type {
   GetRootCauseInput,
   GetCostBreakdownInput,
   ExportTraceInput,
+  ExportTestFixtureInput,
   SpawnShadowInput,
   PromoteShadowInput,
   ListShadowsInput,
@@ -472,6 +474,37 @@ const TOOLS = [
     },
   },
 
+  {
+    name: 'export_test_fixture',
+    description:
+      'Export a captured event trace as a replayable test fixture. Generates a JSON fixture file ' +
+      'with events, topology, and assertions, plus a test file (pytest or vitest) that replays the ' +
+      'trace and verifies tool call order, handoff chain, cost tolerance (10%), and error count.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        swarm_id: {
+          type: 'string',
+          description: 'Optional swarm ID to export. Omit for all events.',
+        },
+        agent_id: {
+          type: 'string',
+          description: 'Optional agent ID filter.',
+        },
+        format: {
+          type: 'string',
+          enum: ['pytest', 'vitest'],
+          description: 'Test framework to generate: "pytest" for Python or "vitest" for TypeScript.',
+        },
+        output_path: {
+          type: 'string',
+          description: 'Optional base filename for the fixture/test output.',
+        },
+      },
+      required: ['format'],
+    },
+  },
+
   // ── Shadow (3) ──
   {
     name: 'spawn_shadow',
@@ -552,6 +585,7 @@ function createToolRegistry(client: CollectorClient): ToolRegistry {
     get_root_cause: (args) => handleGetRootCause(client, args as unknown as GetRootCauseInput),
     get_cost_breakdown: (args) => handleGetCostBreakdown(client, args as unknown as GetCostBreakdownInput),
     export_trace: (args) => handleExportTrace(client, args as unknown as ExportTraceInput),
+    export_test_fixture: (args) => handleExportTestFixture(client, args as unknown as ExportTestFixtureInput),
     spawn_shadow: (args) => handleSpawnShadow(client, args as unknown as SpawnShadowInput),
     promote_shadow: (args) => handlePromoteShadow(client, args as unknown as PromoteShadowInput),
     list_shadows: (args) => handleListShadows(client, args as unknown as ListShadowsInput),
