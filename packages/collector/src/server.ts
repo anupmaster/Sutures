@@ -145,6 +145,97 @@ export function createCollectorServer(config: CollectorServerConfig = {}): Colle
       runBuiltInDemo(router);
       return { status: 'started', message: 'Demo simulation started' };
     });
+
+    // ── Shadow Agent REST Endpoints ──────────────────────────────
+
+    httpServer.post('/api/shadow/spawn', async (request) => {
+      const body = request.body as Record<string, unknown> | undefined;
+      const checkpointId = typeof body?.['checkpoint_id'] === 'string' ? body['checkpoint_id'] : null;
+      if (!checkpointId) {
+        return { error: 'checkpoint_id required' };
+      }
+
+      const checkpoint = router.checkpointStore.getById(checkpointId);
+      if (!checkpoint) {
+        return { error: 'Checkpoint not found' };
+      }
+
+      const description = typeof body?.['description'] === 'string' ? body['description'] : undefined;
+
+      const { entry, event } = router.shadowManager.spawnShadow(
+        checkpointId,
+        checkpoint.agent_id,
+        checkpoint.swarm_id,
+        { description },
+      );
+
+      router.ringBuffer.push(event);
+      // Broadcast to dashboards via the router's broadcastToDashboards (use injectEvent for full pipeline)
+      router.injectEvent(event);
+
+      return {
+        shadow_id: entry.shadow_id,
+        parent_checkpoint_id: entry.parent_checkpoint_id,
+        parent_agent_id: entry.parent_agent_id,
+        swarm_id: entry.swarm_id,
+        status: entry.status,
+        spawned_at: entry.spawned_at,
+      };
+    });
+
+    httpServer.post('/api/shadow/:id/promote', async (request) => {
+      const { id } = request.params as { id: string };
+
+      const result = router.shadowManager.promoteShadow(id);
+      if (!result) {
+        return { error: 'Shadow not found or not in running state' };
+      }
+
+      router.injectEvent(result.event);
+
+      return {
+        shadow_id: result.entry.shadow_id,
+        status: result.entry.status,
+        promoted_at: result.entry.promoted_at,
+      };
+    });
+
+    httpServer.post('/api/shadow/:id/dismiss', async (request) => {
+      const { id } = request.params as { id: string };
+
+      const result = router.shadowManager.dismissShadow(id);
+      if (!result) {
+        return { error: 'Shadow not found or not in running state' };
+      }
+
+      router.injectEvent(result.event);
+
+      return {
+        shadow_id: result.entry.shadow_id,
+        status: result.entry.status,
+        dismissed_at: result.entry.dismissed_at,
+      };
+    });
+
+    httpServer.get('/api/shadows', async (request) => {
+      const query = request.query as Record<string, string>;
+      const swarmId = query['swarm_id'];
+      const shadows = router.shadowManager.listShadows(swarmId);
+      return {
+        shadows: shadows.map((s) => ({
+          shadow_id: s.shadow_id,
+          parent_checkpoint_id: s.parent_checkpoint_id,
+          parent_agent_id: s.parent_agent_id,
+          swarm_id: s.swarm_id,
+          status: s.status,
+          description: s.description,
+          event_count: s.events.length,
+          spawned_at: s.spawned_at,
+          promoted_at: s.promoted_at,
+          dismissed_at: s.dismissed_at,
+        })),
+      };
+    });
   })();
 
   return {

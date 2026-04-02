@@ -66,7 +66,7 @@ export class CollectorClient {
   /**
    * Make an HTTP GET request to the collector with retry logic.
    */
-  private async httpGet<T>(path: string, params?: Record<string, string>): Promise<T> {
+  async httpGet<T>(path: string, params?: Record<string, string>): Promise<T> {
     const url = new URL(path, this.httpUrl);
     if (params) {
       for (const [key, value] of Object.entries(params)) {
@@ -104,6 +104,46 @@ export class CollectorClient {
     }
 
     throw lastError ?? new Error('HTTP request failed');
+  }
+
+  /**
+   * Make an HTTP POST request to the collector with retry logic.
+   */
+  async httpPost<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    const url = new URL(path, this.httpUrl);
+
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt <= HTTP_RETRY_ATTEMPTS; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
+
+        const response = await fetch(url.toString(), {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return (await response.json()) as T;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        if (attempt < HTTP_RETRY_ATTEMPTS) {
+          await this.sleep(HTTP_RETRY_DELAY_MS * (attempt + 1));
+        }
+      }
+    }
+
+    throw lastError ?? new Error('HTTP POST request failed');
   }
 
   async getHealth(): Promise<CollectorHealthResponse> {

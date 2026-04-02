@@ -266,3 +266,20 @@ export type OutboundMessage =
   | OutboundTopologyMessage
   | OutboundAnomalyMessage
   | OutboundSessionMessage;
+
+// ── Shadow Agent Types ───────────────────────────────────────────
+
+export type ShadowStatus = 'running' | 'promoted' | 'dismissed';
+
+export interface ShadowEntry {
+  shadow_id: string;
+  parent_checkpoint_id: string;
+  parent_agent_id: string;
+  swarm_id: string;
+  status: ShadowStatus;
+  description?: string;
+  events: AgentEvent[];
+  spawned_at: string;
+  promoted_at?: string;
+  dismissed_at?: string;
+}

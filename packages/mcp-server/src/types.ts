@@ -278,3 +278,18 @@ export interface ExportTraceInput {
   agent_id?: string;
   limit?: number;
 }
+
+// ── Shadow Tool Input Types ─────────────────────────────────────
+
+export interface SpawnShadowInput {
+  checkpoint_id: string;
+  description?: string;
+}
+
+export interface PromoteShadowInput {
+  shadow_id: string;
+}
+
+export interface ListShadowsInput {
+  swarm_id?: string;
+}

@@ -52,6 +52,11 @@ import {
   handleGetCostBreakdown,
   handleExportTrace,
 } from './tools/analysis.js';
+import {
+  handleSpawnShadow,
+  handlePromoteShadow,
+  handleListShadows,
+} from './tools/shadow.js';
 
 import type {
   ListAgentsInput,
@@ -72,6 +77,9 @@ import type {
   GetRootCauseInput,
   GetCostBreakdownInput,
   ExportTraceInput,
+  SpawnShadowInput,
+  PromoteShadowInput,
+  ListShadowsInput,
 } from './types.js';
 
 // ── Constants ────────────────────────────────────────────────────
@@ -463,6 +471,60 @@ const TOOLS = [
       },
     },
   },
+
+  // ── Shadow (3) ──
+  {
+    name: 'spawn_shadow',
+    description:
+      'Create a shadow agent from a checkpoint. The shadow runs independently without ' +
+      'affecting the real agent. If the shadow result is better, use promote_shadow to ' +
+      'replace the real agent state. Shadow agents use in-memory state for zero contention.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        checkpoint_id: {
+          type: 'string',
+          description: 'The checkpoint ID to spawn the shadow from.',
+        },
+        description: {
+          type: 'string',
+          description: 'Optional description of what this shadow is testing.',
+        },
+      },
+      required: ['checkpoint_id'],
+    },
+  },
+  {
+    name: 'promote_shadow',
+    description:
+      "Promote a shadow agent's state to replace the real agent. Only works on shadows " +
+      'in "running" status. The shadow state is persisted and the real agent picks up from there.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        shadow_id: {
+          type: 'string',
+          description: 'The shadow agent ID to promote.',
+        },
+      },
+      required: ['shadow_id'],
+    },
+  },
+  {
+    name: 'list_shadows',
+    description:
+      'List all shadow agents with their status (running/promoted/dismissed), ' +
+      'parent checkpoint, event count, and timestamps.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        swarm_id: {
+          type: 'string',
+          description: 'Optional swarm ID filter.',
+        },
+      },
+    },
+  },
 ];
 
 // ── Tool Registry Setup ─────────────────────────────────────────
@@ -490,6 +552,9 @@ function createToolRegistry(client: CollectorClient): ToolRegistry {
     get_root_cause: (args) => handleGetRootCause(client, args as unknown as GetRootCauseInput),
     get_cost_breakdown: (args) => handleGetCostBreakdown(client, args as unknown as GetCostBreakdownInput),
     export_trace: (args) => handleExportTrace(client, args as unknown as ExportTraceInput),
+    spawn_shadow: (args) => handleSpawnShadow(client, args as unknown as SpawnShadowInput),
+    promote_shadow: (args) => handlePromoteShadow(client, args as unknown as PromoteShadowInput),
+    list_shadows: (args) => handleListShadows(client, args as unknown as ListShadowsInput),
   };
 
   for (const tool of TOOLS) {

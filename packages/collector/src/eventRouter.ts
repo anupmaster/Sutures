@@ -27,6 +27,7 @@ import { BreakpointController } from './breakpointController.js';
 import { AnomalyEngine } from './anomalyEngine.js';
 import { OtelExporter } from './otelExporter.js';
 import { CommandRegistry, type CommandHandlerContext } from './commandRegistry.js';
+import { ShadowManager } from './shadowManager.js';
 
 export interface EventRouterConfig {
   ringBufferCapacity?: number;
@@ -42,6 +43,7 @@ export class EventRouter {
   readonly anomalyEngine: AnomalyEngine;
   readonly otelExporter: OtelExporter;
   readonly commandRegistry: CommandRegistry;
+  readonly shadowManager: ShadowManager;
 
   /** Connected adapter WebSockets. */
   readonly adapterClients = new Set<WebSocket>();
@@ -65,6 +67,7 @@ export class EventRouter {
       enabled: config.otelEnabled ?? false,
     });
     this.commandRegistry = new CommandRegistry();
+    this.shadowManager = new ShadowManager();
     this.registerBuiltInCommands();
   }
 
@@ -200,6 +203,18 @@ export class EventRouter {
     this.commandRegistry.register({
       name: 'resume_all',
       handler(payload, ctx) { self.handleResumeAll(payload, ctx); },
+    });
+    this.commandRegistry.register({
+      name: 'spawn_shadow',
+      handler(payload, ctx) { self.handleSpawnShadow(payload, ctx); },
+    });
+    this.commandRegistry.register({
+      name: 'promote_shadow',
+      handler(payload, ctx) { self.handlePromoteShadow(payload, ctx); },
+    });
+    this.commandRegistry.register({
+      name: 'dismiss_shadow',
+      handler(payload, ctx) { self.handleDismissShadow(payload, ctx); },
     });
   }
 
@@ -392,6 +407,89 @@ export class EventRouter {
     this.ringBuffer.push(resumeEvent);
     this.broadcastToDashboards({ type: 'event', payload: resumeEvent });
     ctx.sendResponse('resume_all', { status: 'ok' });
+  }
+
+  // ── Shadow command handlers ──────────────────────────────────────
+
+  private handleSpawnShadow(payload: Record<string, unknown>, ctx: CommandHandlerContext): void {
+    const checkpointId = typeof payload['checkpoint_id'] === 'string' ? payload['checkpoint_id'] : null;
+    if (!checkpointId) {
+      ctx.sendResponse('spawn_shadow', { error: 'checkpoint_id required' });
+      return;
+    }
+
+    const checkpoint = this.checkpointStore.getById(checkpointId);
+    if (!checkpoint) {
+      ctx.sendResponse('spawn_shadow', { error: 'Checkpoint not found' });
+      return;
+    }
+
+    const description = typeof payload['description'] === 'string' ? payload['description'] : undefined;
+
+    const { entry, event } = this.shadowManager.spawnShadow(
+      checkpointId,
+      checkpoint.agent_id,
+      checkpoint.swarm_id,
+      { description },
+    );
+
+    this.ringBuffer.push(event);
+    this.broadcastToDashboards({ type: 'event', payload: event });
+
+    ctx.sendResponse('spawn_shadow', {
+      shadow_id: entry.shadow_id,
+      parent_checkpoint_id: entry.parent_checkpoint_id,
+      parent_agent_id: entry.parent_agent_id,
+      swarm_id: entry.swarm_id,
+      status: entry.status,
+      spawned_at: entry.spawned_at,
+    });
+  }
+
+  private handlePromoteShadow(payload: Record<string, unknown>, ctx: CommandHandlerContext): void {
+    const shadowId = typeof payload['shadow_id'] === 'string' ? payload['shadow_id'] : null;
+    if (!shadowId) {
+      ctx.sendResponse('promote_shadow', { error: 'shadow_id required' });
+      return;
+    }
+
+    const result = this.shadowManager.promoteShadow(shadowId);
+    if (!result) {
+      ctx.sendResponse('promote_shadow', { error: 'Shadow not found or not in running state' });
+      return;
+    }
+
+    this.ringBuffer.push(result.event);
+    this.broadcastToDashboards({ type: 'event', payload: result.event });
+
+    ctx.sendResponse('promote_shadow', {
+      shadow_id: result.entry.shadow_id,
+      status: result.entry.status,
+      promoted_at: result.entry.promoted_at,
+    });
+  }
+
+  private handleDismissShadow(payload: Record<string, unknown>, ctx: CommandHandlerContext): void {
+    const shadowId = typeof payload['shadow_id'] === 'string' ? payload['shadow_id'] : null;
+    if (!shadowId) {
+      ctx.sendResponse('dismiss_shadow', { error: 'shadow_id required' });
+      return;
+    }
+
+    const result = this.shadowManager.dismissShadow(shadowId);
+    if (!result) {
+      ctx.sendResponse('dismiss_shadow', { error: 'Shadow not found or not in running state' });
+      return;
+    }
+
+    this.ringBuffer.push(result.event);
+    this.broadcastToDashboards({ type: 'event', payload: result.event });
+
+    ctx.sendResponse('dismiss_shadow', {
+      shadow_id: result.entry.shadow_id,
+      status: result.entry.status,
+      dismissed_at: result.entry.dismissed_at,
+    });
   }
 
   /**
