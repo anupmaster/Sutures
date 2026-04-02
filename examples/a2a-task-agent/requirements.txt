@@ -1,0 +1,2 @@
+sutures-a2a>=0.1.0a1
+aiohttp>=3.9
