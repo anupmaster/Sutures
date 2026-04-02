@@ -168,9 +168,9 @@ export default function DashboardPage() {
   const renderBottomPanel = () => {
     switch (bottomTab) {
       case "timeline":
-        return <TimelinePanel />;
+        return <TimelinePanel onSendCommand={handleSendCommand} />;
       case "breakpoints":
-        return <BreakpointPanel />;
+        return <BreakpointPanel onSendCommand={handleSendCommand} />;
       case "inject":
         return <InjectionEditor onSendCommand={handleSendCommand} />;
       case "memory":

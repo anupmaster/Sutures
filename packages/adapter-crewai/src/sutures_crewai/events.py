@@ -18,14 +18,15 @@ Severity = Literal["debug", "info", "warn", "error", "critical"]
 
 
 def _uuid7() -> str:
-    """Generate a UUIDv7 (time-ordered) identifier."""
+    """Generate a UUIDv7 (time-ordered) identifier per RFC 9562."""
     timestamp_ms = int(time.time() * 1000)
-    uuid_int = timestamp_ms << 80
+    rand_a = int.from_bytes(os.urandom(2), "big") & 0x0FFF
+    rand_b = int.from_bytes(os.urandom(8), "big") & 0x3FFF_FFFF_FFFF_FFFF
+    uuid_int = (timestamp_ms & 0xFFFF_FFFF_FFFF) << 80
     uuid_int |= 0x7 << 76
-    rand_bits = int.from_bytes(os.urandom(8), "big")
-    uuid_int |= (rand_bits & 0x0FFF) << 64
-    uuid_int |= 0x8 << 60
-    uuid_int |= rand_bits >> 4 & 0x0FFF_FFFF_FFFF_FFFF
+    uuid_int |= rand_a << 64
+    uuid_int |= 0b10 << 62
+    uuid_int |= rand_b
     return str(uuid.UUID(int=uuid_int))
 
 

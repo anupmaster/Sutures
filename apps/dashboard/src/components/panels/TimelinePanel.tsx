@@ -5,7 +5,7 @@ import { GitFork, Bookmark, ChevronDown, RotateCcw } from "lucide-react";
 import { useEventStore } from "@/stores/eventStore";
 import { useSwarmStore } from "@/stores/swarmStore";
 import { STATE_COLORS } from "@/lib/constants";
-import type { AgentEvent, EventCategory } from "@/lib/types";
+import type { AgentEvent, EventCategory, DashboardCommand } from "@/lib/types";
 
 // ── Event type → color mapping ──────────────────────
 const EVENT_COLORS: Record<EventCategory, string> = {
@@ -215,7 +215,11 @@ interface ForkTarget {
   type: "checkpoint" | "breakpoint";
 }
 
-export function TimelinePanel() {
+interface TimelinePanelProps {
+  onSendCommand?: (cmd: DashboardCommand) => void;
+}
+
+export function TimelinePanel({ onSendCommand }: TimelinePanelProps) {
   const events = useEventStore((s) => s.events);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -231,11 +235,15 @@ export function TimelinePanel() {
 
   const executeFork = useCallback(() => {
     if (!forkTarget) return;
-    // In a real implementation, this would send a fork_from_checkpoint command
-    // via WebSocket. For now, log and provide visual feedback.
-    console.log(`[Timeline] Fork from ${forkTarget.type}:`, forkTarget.event.id);
+    if (forkTarget.type === "checkpoint" && typeof forkTarget.event.payload.checkpoint_id === "string") {
+      onSendCommand?.({
+        type: "command",
+        command: "fork_from_checkpoint",
+        payload: { checkpoint_id: forkTarget.event.payload.checkpoint_id },
+      });
+    }
     setForkTarget(null);
-  }, [forkTarget]);
+  }, [forkTarget, onSendCommand]);
 
   // Filter events
   const filteredEvents = useMemo(() => {
@@ -304,7 +312,7 @@ export function TimelinePanel() {
   ];
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden relative">
       {/* Filter bar */}
       <div
         className="flex items-center gap-1 px-3 py-1 border-b shrink-0"

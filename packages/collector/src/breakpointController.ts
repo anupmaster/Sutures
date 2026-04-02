@@ -131,8 +131,14 @@ export class BreakpointController {
       case 'always':
         return true;
 
-      case 'on_turn':
-        return event.event_type.startsWith('turn.');
+      case 'on_turn': {
+        if (event.event_type !== 'turn.started') return false;
+        if (value != null && typeof value === 'number') {
+          const turnNumber = extractNumber(event.data, 'turn_number');
+          return turnNumber != null && turnNumber === value;
+        }
+        return true;
+      }
 
       case 'on_tool':
         if (event.event_type !== 'turn.acting') return false;
@@ -148,7 +154,7 @@ export class BreakpointController {
       case 'on_cost': {
         if (event.event_type !== 'cost.api_call' && event.event_type !== 'cost.tokens') return false;
         if (value != null && typeof value === 'number') {
-          const costUsd = extractNumber(event.data, 'cost_usd');
+          const costUsd = extractNumber(event.data, 'cumulative_cost_usd') ?? extractNumber(event.data, 'cost_usd');
           return costUsd != null && costUsd >= value;
         }
         return true;

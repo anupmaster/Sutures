@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
 from typing import Any
 
 import websockets
@@ -20,6 +21,8 @@ class SuturesWSClient:
         self._ws: ClientConnection | None = None
         self._buffer: list[AgentEvent] = []
         self._connected = False
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._thread: threading.Thread | None = None
 
     async def connect(self) -> None:
         try:
@@ -56,9 +59,17 @@ class SuturesWSClient:
             await self._ws.close()
             self._connected = False
 
+    def _ensure_loop(self) -> None:
+        if self._loop is None or not self._loop.is_running():
+            self._loop = asyncio.new_event_loop()
+            self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
+            self._thread.start()
+
     def send_event_sync(self, event: AgentEvent) -> None:
+        """Thread-safe synchronous wrapper for sending events."""
         try:
             loop = asyncio.get_running_loop()
             loop.create_task(self.send_event(event))
         except RuntimeError:
-            asyncio.run(self.send_event(event))
+            self._ensure_loop()
+            asyncio.run_coroutine_threadsafe(self.send_event(event), self._loop)

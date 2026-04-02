@@ -23,14 +23,8 @@ Quick start:
 from sutures_generic.adapter import SuturesAdapter
 from sutures_generic.events import AgentEvent, PROTOCOL_VERSION
 
-# Convenience alias for the decorator-only pattern
-trace_agent = None  # Use adapter.trace_agent instead
-trace_tool = None  # Use adapter.trace_tool instead
-
 __all__ = [
     "SuturesAdapter",
-    "trace_agent",
-    "trace_tool",
     "AgentEvent",
     "PROTOCOL_VERSION",
 ]

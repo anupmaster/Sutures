@@ -5,7 +5,7 @@ import { Plus, Trash2, ToggleLeft, ToggleRight } from "lucide-react";
 import { useBreakpointStore } from "@/stores/breakpointStore";
 import { useSwarmStore } from "@/stores/swarmStore";
 import { BREAKPOINT_LABELS } from "@/lib/constants";
-import type { BreakpointCondition } from "@/lib/types";
+import type { BreakpointCondition, DashboardCommand } from "@/lib/types";
 
 const CONDITION_GROUPS: { label: string; conditions: BreakpointCondition[] }[] = [
   {
@@ -29,7 +29,11 @@ const CONDITION_GROUPS: { label: string; conditions: BreakpointCondition[] }[] =
 const NEEDS_THRESHOLD: BreakpointCondition[] = ["on_cost", "on_score", "on_context_pressure", "on_turn"];
 const NEEDS_VALUE: BreakpointCondition[] = ["on_tool", "on_handoff"];
 
-export function BreakpointPanel() {
+interface BreakpointPanelProps {
+  onSendCommand?: (cmd: DashboardCommand) => void;
+}
+
+export function BreakpointPanel({ onSendCommand }: BreakpointPanelProps) {
   const breakpoints = useBreakpointStore((s) => s.breakpoints);
   const hits = useBreakpointStore((s) => s.hits);
   const addBreakpoint = useBreakpointStore((s) => s.addBreakpoint);
@@ -64,11 +68,20 @@ export function BreakpointPanel() {
       createdAt: new Date().toISOString(),
     };
     addBreakpoint(bp);
+    onSendCommand?.({
+      type: "command",
+      command: "set_breakpoint",
+      payload: {
+        condition: bp.condition,
+        agent_id: bp.agentId || undefined,
+        value: bp.params?.threshold ?? bp.params?.value ?? undefined,
+      },
+    });
     setShowForm(false);
     setFormAgent("");
     setFormCondition("on_turn");
     setFormThreshold("");
-  }, [formAgent, formCondition, formThreshold, addBreakpoint]);
+  }, [formAgent, formCondition, formThreshold, addBreakpoint, onSendCommand]);
 
   return (
     <div className="h-full flex flex-col overflow-hidden font-body text-xs">
@@ -262,7 +275,14 @@ export function BreakpointPanel() {
                       )}
                     </button>
                     <button
-                      onClick={() => removeBreakpoint(bp.id)}
+                      onClick={() => {
+                        removeBreakpoint(bp.id);
+                        onSendCommand?.({
+                          type: "command",
+                          command: "release_breakpoint",
+                          payload: { breakpoint_id: bp.id },
+                        });
+                      }}
                       className="p-1 rounded hover:bg-[#222225] transition-colors"
                     >
                       <Trash2 size={14} style={{ color: "#71717A" }} />

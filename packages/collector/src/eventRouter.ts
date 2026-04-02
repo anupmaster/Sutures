@@ -498,8 +498,8 @@ export class EventRouter {
         payload: { action: 'join', session_id: sessionId, user_name: name, color, active_sessions: activeSessions },
       });
 
-      // Broadcast to other dashboards that a new user joined
-      this.broadcastSessionToOthers(ws, { action: 'join', session_id: sessionId, user_name: name, color, active_sessions: activeSessions });
+      // Broadcast to other dashboards that a new user joined — WITHOUT active_sessions
+      this.broadcastSessionToOthers(ws, { action: 'join', session_id: sessionId, user_name: name, color });
     } else if (action === 'leave') {
       this.removeSession(ws);
     } else if (action === 'cursor' || action === 'selection') {

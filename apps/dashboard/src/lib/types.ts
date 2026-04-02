@@ -116,6 +116,8 @@ export interface DashboardCommand {
     | "release_breakpoint"
     | "inject_and_resume"
     | "remove_breakpoint"
+    | "fork_from_checkpoint"
+    | "get_checkpoints"
     | "pause_all"
     | "resume_all";
   payload: Record<string, unknown>;
