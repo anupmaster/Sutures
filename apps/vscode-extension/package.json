@@ -1,0 +1,139 @@
+{
+  "name": "sutures-vscode",
+  "displayName": "Sutures — Breakpoints for AI Agents",
+  "description": "Live debugging, breakpoints, and intervention for multi-agent AI swarms. Pause any agent, see its context window, inject fixes, fork reality.",
+  "version": "0.1.0",
+  "publisher": "sutures",
+  "license": "Apache-2.0",
+  "icon": "media/icon.svg",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Debuggers",
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "agents",
+    "multi-agent",
+    "debugging",
+    "breakpoints",
+    "swarm",
+    "llm",
+    "langraph",
+    "crewai",
+    "mcp"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anupmaster/sutures"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onView:suturesAgentExplorer"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sutures",
+          "title": "Sutures",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sutures": [
+        {
+          "id": "suturesAgentExplorer",
+          "name": "Agent Explorer",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "sutures.connect",
+        "title": "Sutures: Connect to Collector"
+      },
+      {
+        "command": "sutures.disconnect",
+        "title": "Sutures: Disconnect from Collector"
+      },
+      {
+        "command": "sutures.setBreakpoint",
+        "title": "Sutures: Set Breakpoint on Agent"
+      },
+      {
+        "command": "sutures.openDashboard",
+        "title": "Sutures: Open Dashboard in Browser"
+      },
+      {
+        "command": "sutures.startSimulation",
+        "title": "Sutures: Start Demo Simulation"
+      },
+      {
+        "command": "sutures.refreshExplorer",
+        "title": "Sutures: Refresh Agent Explorer",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "sutures.refreshExplorer",
+          "when": "view == suturesAgentExplorer",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Sutures",
+      "properties": {
+        "sutures.collectorHost": {
+          "type": "string",
+          "default": "localhost",
+          "description": "Hostname of the Sutures collector server"
+        },
+        "sutures.collectorWsPort": {
+          "type": "number",
+          "default": 9470,
+          "description": "WebSocket port of the Sutures collector server"
+        },
+        "sutures.collectorHttpPort": {
+          "type": "number",
+          "default": 9471,
+          "description": "HTTP port of the Sutures collector server"
+        },
+        "sutures.dashboardPort": {
+          "type": "number",
+          "default": 9472,
+          "description": "Port of the Sutures dashboard UI"
+        },
+        "sutures.autoConnect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically connect to the collector when the extension activates"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+    "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
+    "package": "npx @vscode/vsce package --no-dependencies",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@types/ws": "^8.5.10",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}
