@@ -12,15 +12,18 @@ import {
   type Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Play, Loader2 } from "lucide-react";
+import { Play, Loader2, Brain } from "lucide-react";
 import { AgentNode } from "./AgentNode";
 import { HandoffEdge } from "./HandoffEdge";
+import { MemoryNode } from "./MemoryNode";
 import { useTopology } from "@/hooks/useTopology";
+import { useGMemoryOverlay } from "@/hooks/useGMemoryOverlay";
 import { useSwarmStore } from "@/stores/swarmStore";
 import { HTTP_PORT } from "@/lib/constants";
 
 const nodeTypes: NodeTypes = {
   agentNode: AgentNode,
+  memoryNode: MemoryNode,
 };
 
 const edgeTypes: EdgeTypes = {
@@ -103,9 +106,25 @@ export function TopologyCanvas() {
   const agents = useSwarmStore((s) => s.agents);
   const setSelectedAgent = useSwarmStore((s) => s.setSelectedAgent);
 
+  const { memoryNodes, memoryEdges, isEnabled, isAutoDisabled, toggle } =
+    useGMemoryOverlay(agents.size);
+
+  // Merge agent + memory nodes/edges when overlay is enabled
+  const mergedNodes = useMemo(
+    () => (isEnabled ? [...nodes, ...memoryNodes] : nodes),
+    [isEnabled, nodes, memoryNodes]
+  );
+  const mergedEdges = useMemo(
+    () => (isEnabled ? [...edges, ...memoryEdges] : edges),
+    [isEnabled, edges, memoryEdges]
+  );
+
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
-      setSelectedAgent(node.id);
+      // Only select agent nodes, not memory nodes
+      if (node.type !== "memoryNode") {
+        setSelectedAgent(node.id);
+      }
     },
     [setSelectedAgent]
   );
@@ -127,9 +146,36 @@ export function TopologyCanvas() {
   return (
     <div className="w-full h-full relative" style={{ backgroundColor: "#111113" }}>
       {isEmpty && <EmptyState />}
+
+      {/* G-Memory overlay toggle */}
+      {!isEmpty && (
+        <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
+          <button
+            onClick={toggle}
+            disabled={isAutoDisabled}
+            title={
+              isAutoDisabled
+                ? "G-Memory disabled in lite mode (>20 agents)"
+                : isEnabled
+                  ? "Hide G-Memory overlay"
+                  : "Show G-Memory overlay"
+            }
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-display font-semibold transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            style={{
+              backgroundColor: isEnabled ? "#8B5CF620" : "#222225",
+              border: `1px solid ${isEnabled ? "#8B5CF6" : "#333336"}`,
+              color: isEnabled ? "#8B5CF6" : "#A1A1AA",
+            }}
+          >
+            <Brain size={13} />
+            G-Memory
+          </button>
+        </div>
+      )}
+
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={mergedNodes}
+        edges={mergedEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         defaultEdgeOptions={defaultEdgeOptions}
@@ -157,6 +203,15 @@ export function TopologyCanvas() {
           pannable
           zoomable
           nodeColor={(node) => {
+            if (node.type === "memoryNode") {
+              const memType = (node.data as Record<string, unknown>)?.type as string;
+              const memColors: Record<string, string> = {
+                insight: "#8B5CF6",
+                query: "#3B82F6",
+                interaction: "#10B981",
+              };
+              return memColors[memType] ?? "#8B5CF6";
+            }
             const state = (node.data as Record<string, unknown>)?.state as string;
             const colors: Record<string, string> = {
               idle: "#6B7280",
