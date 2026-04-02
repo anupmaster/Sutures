@@ -1,0 +1,2 @@
+crewai>=0.80.0
+sutures-crewai>=0.1.0a1

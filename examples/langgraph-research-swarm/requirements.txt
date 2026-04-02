@@ -1,0 +1,5 @@
+langgraph>=0.3.0
+langchain-core>=0.3.0
+langchain-openai>=0.3.0
+sutures-langgraph>=0.1.0a1
+python-dotenv>=1.0.0
