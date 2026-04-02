@@ -39,6 +39,7 @@ export function InjectionEditor({ onSendCommand }: InjectionEditorProps) {
   const [messages, setMessages] = useState<InjectionMessage[]>([]);
   const [stateJson, setStateJson] = useState("");
   const [sending, setSending] = useState(false);
+  const [jsonError, setJsonError] = useState<string | null>(null);
 
   // Auto-select first paused agent
   const effectiveAgentId = selectedAgentId || (pausedAgents[0]?.id ?? "");
@@ -251,16 +252,33 @@ export function InjectionEditor({ onSendCommand }: InjectionEditorProps) {
           </span>
           <textarea
             value={stateJson}
-            onChange={(e) => setStateJson(e.target.value)}
+            onChange={(e) => {
+              setStateJson(e.target.value);
+              if (e.target.value.trim()) {
+                try {
+                  JSON.parse(e.target.value);
+                  setJsonError(null);
+                } catch {
+                  setJsonError("Invalid JSON");
+                }
+              } else {
+                setJsonError(null);
+              }
+            }}
             placeholder='{"key": "value"}'
             rows={3}
             className="w-full text-[11px] font-mono rounded px-2 py-1.5 outline-none resize-none"
             style={{
               backgroundColor: "#1A1A1D",
               color: "#F5F5F5",
-              border: "1px solid #222225",
+              border: `1px solid ${jsonError ? "#EF4444" : "#222225"}`,
             }}
           />
+          {jsonError && (
+            <p className="text-[9px] font-display mt-0.5" style={{ color: "#EF4444" }}>
+              {jsonError}
+            </p>
+          )}
         </div>
 
         {/* Agent context summary */}
@@ -300,7 +318,7 @@ export function InjectionEditor({ onSendCommand }: InjectionEditorProps) {
       <div className="shrink-0 px-3 py-2 border-t" style={{ borderColor: "#222225" }}>
         <button
           onClick={handleInject}
-          disabled={sending || !effectiveAgentId}
+          disabled={sending || !effectiveAgentId || !!jsonError}
           className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-display font-semibold transition-all hover:brightness-110 disabled:opacity-50"
           style={{ backgroundColor: "#10B981", color: "#0A0A0B" }}
         >

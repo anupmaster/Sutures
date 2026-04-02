@@ -139,8 +139,7 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
             ...existing,
             name: a.name || existing.name,
             model: a.model || existing.model,
-            // Only update state from topology if event processor hasn't set a richer state
-            state: existing.state === "idle" && a.state !== "idle" ? a.state : existing.state,
+            state: existing.state,  // events drive state, topology doesn't override
           });
         } else {
           agentMap.set(a.id, a);

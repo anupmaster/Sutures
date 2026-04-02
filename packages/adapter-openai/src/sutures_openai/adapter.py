@@ -167,39 +167,64 @@ class SuturesOpenAIAdapter:
                     or getattr(tool, "__name__", str(tool))
                 )
 
-                @wraps(tool)
-                async def wrapped(*args: Any, _tool=tool, _name=tool_name, **kwargs: Any) -> Any:
-                    turn = adapter._turn_counts.get(agent_id, 1)
-                    adapter._emit(make_event(
-                        adapter.swarm_id,
-                        agent_id,
-                        "turn.acting",
-                        {
-                            "turn_number": turn,
-                            "tool_name": _name,
-                            "tool_input_summary": str(kwargs)[:300],
-                        },
-                    ))
-
-                    if asyncio.iscoroutinefunction(_tool):
+                if asyncio.iscoroutinefunction(tool):
+                    @wraps(tool)
+                    async def async_wrapped(*args: Any, _tool=tool, _name=tool_name, **kwargs: Any) -> Any:
+                        turn = adapter._turn_counts.get(agent_id, 1)
+                        adapter._emit(make_event(
+                            adapter.swarm_id,
+                            agent_id,
+                            "turn.acting",
+                            {
+                                "turn_number": turn,
+                                "tool_name": _name,
+                                "tool_input_summary": str(kwargs)[:300],
+                            },
+                        ))
                         result = await _tool(*args, **kwargs)
-                    else:
+                        adapter._emit(make_event(
+                            adapter.swarm_id,
+                            agent_id,
+                            "turn.observed",
+                            {
+                                "turn_number": turn,
+                                "tool_name": _name,
+                                "tool_output_summary": str(result)[:500],
+                            },
+                        ))
+                        return result
+
+                    async_wrapped._sutures_wrapped = True  # type: ignore[attr-defined]
+                    wrapped_tools.append(async_wrapped)
+                else:
+                    @wraps(tool)
+                    def sync_wrapped(*args: Any, _tool=tool, _name=tool_name, **kwargs: Any) -> Any:
+                        turn = adapter._turn_counts.get(agent_id, 1)
+                        adapter._emit(make_event(
+                            adapter.swarm_id,
+                            agent_id,
+                            "turn.acting",
+                            {
+                                "turn_number": turn,
+                                "tool_name": _name,
+                                "tool_input_summary": str(kwargs)[:300],
+                            },
+                        ))
                         result = _tool(*args, **kwargs)
+                        adapter._emit(make_event(
+                            adapter.swarm_id,
+                            agent_id,
+                            "turn.observed",
+                            {
+                                "turn_number": turn,
+                                "tool_name": _name,
+                                "tool_output_summary": str(result)[:500],
+                            },
+                        ))
+                        return result
 
-                    adapter._emit(make_event(
-                        adapter.swarm_id,
-                        agent_id,
-                        "turn.observed",
-                        {
-                            "turn_number": turn,
-                            "tool_name": _name,
-                            "tool_output_summary": str(result)[:500],
-                        },
-                    ))
-                    return result
-
-                wrapped._sutures_wrapped = True  # type: ignore[attr-defined]
-                wrapped_tools.append(wrapped)
+                    sync_wrapped._sutures_wrapped = True  # type: ignore[attr-defined]
+                    wrapped_tools.append(sync_wrapped)
             else:
                 wrapped_tools.append(tool)
 

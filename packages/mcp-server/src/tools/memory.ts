@@ -122,22 +122,64 @@ export async function handleGetMemoryHierarchy(
   const reconsolidateEvents = events.filter((e) => e.event_type === 'memory.reconsolidate');
 
   // Extract tier info from events
-  const stm: Array<Record<string, unknown>> = [];
-  const mtm: Array<Record<string, unknown>> = [];
-  const ltm: Array<Record<string, unknown>> = [];
+  let stm: Array<Record<string, unknown>> = [];
+  let mtm: Array<Record<string, unknown>> = [];
+  let ltm: Array<Record<string, unknown>> = [];
 
-  for (const e of memoryWrites) {
-    const tier = e.data['tier'];
-    const entry = {
-      key: e.data['key'],
-      timestamp: e.timestamp,
-      size: e.data['size'],
-      ttl: e.data['ttl'],
-    };
-    if (tier === 'stm') stm.push(entry);
-    else if (tier === 'mtm') mtm.push(entry);
-    else if (tier === 'ltm') ltm.push(entry);
-    else stm.push(entry); // Default to STM
+  // Replay all memory events in order to build accurate tier state
+  const memoryEvents = events.filter((e) =>
+    e.event_type === 'memory.write' ||
+    e.event_type === 'memory.prune' ||
+    e.event_type === 'memory.tier_migration',
+  );
+  memoryEvents.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+  for (const e of memoryEvents) {
+    if (e.event_type === 'memory.write') {
+      const tier = e.data['tier'];
+      const entry = {
+        key: e.data['key'],
+        timestamp: e.timestamp,
+        size: e.data['size'],
+        ttl: e.data['ttl'],
+      };
+      if (tier === 'stm') stm.push(entry);
+      else if (tier === 'mtm') mtm.push(entry);
+      else if (tier === 'ltm') ltm.push(entry);
+      else stm.push(entry); // Default to STM
+    } else if (e.event_type === 'memory.prune') {
+      const pruneKey = e.data['key'] as string | undefined;
+      if (pruneKey) {
+        stm = stm.filter(entry => entry.key !== pruneKey);
+        mtm = mtm.filter(entry => entry.key !== pruneKey);
+        ltm = ltm.filter(entry => entry.key !== pruneKey);
+      }
+      // Also handle batch prune with keys array
+      const pruneKeys = e.data['keys'] as string[] | undefined;
+      if (pruneKeys) {
+        const keySet = new Set(pruneKeys);
+        stm = stm.filter(entry => !keySet.has(entry.key as string));
+        mtm = mtm.filter(entry => !keySet.has(entry.key as string));
+        ltm = ltm.filter(entry => !keySet.has(entry.key as string));
+      }
+    } else if (e.event_type === 'memory.tier_migration') {
+      const key = e.data['key'] as string;
+      const fromTier = e.data['from_tier'] as string;
+      const toTier = e.data['to_tier'] as string;
+      if (key && fromTier && toTier) {
+        // Remove from source tier
+        let entry: Record<string, unknown> | undefined;
+        if (fromTier === 'stm') { entry = stm.find(item => item.key === key); stm = stm.filter(item => item.key !== key); }
+        else if (fromTier === 'mtm') { entry = mtm.find(item => item.key === key); mtm = mtm.filter(item => item.key !== key); }
+        else if (fromTier === 'ltm') { entry = ltm.find(item => item.key === key); ltm = ltm.filter(item => item.key !== key); }
+        // Add to destination tier
+        if (entry) {
+          if (toTier === 'stm') stm.push(entry);
+          else if (toTier === 'mtm') mtm.push(entry);
+          else if (toTier === 'ltm') ltm.push(entry);
+        }
+      }
+    }
   }
 
   // Compute pressure from most recent relevant event

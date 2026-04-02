@@ -15,16 +15,21 @@ import type { AgentEvent, AgentInfo, AgentState, EventCategory, HandoffEdgeData,
 function mapTopologyStatus(status: string): AgentState {
   switch (status) {
     case "spawned":
+      return "spawned";
     case "idle":
       return "idle";
     case "thinking":
       return "thinking";
     case "acting":
       return "acting";
+    case "observing":
+      return "observing";
     case "paused":
       return "paused";
     case "completed":
       return "completed";
+    case "failed":
+      return "failed";
     default:
       return "idle";
   }
@@ -174,7 +179,7 @@ export function useEventProcessor() {
             break;
 
           case "agent.failed":
-            updateAgentState(agentId, "paused"); // show as paused/error
+            updateAgentState(agentId, "failed");
             break;
 
           case "agent.paused":
@@ -314,8 +319,10 @@ export function useEventProcessor() {
                 payload.cumulative_cost_usd as number
               );
             } else if (typeof payload.cost_usd === "number") {
-              // Fallback: read current and add
-              updateAgentCost(agentId, payload.cost_usd as number);
+              // Fallback: accumulate by reading current cost and adding
+              const currentAgent = useSwarmStore.getState().agents.get(agentId);
+              const currentCost = currentAgent?.cumulativeCost ?? 0;
+              updateAgentCost(agentId, currentCost + (payload.cost_usd as number));
             }
             break;
 
@@ -372,6 +379,7 @@ export function useEventProcessor() {
 
           case "memory.read": {
             // Update heat on read (accessed = hotter)
+            // Uses getState() directly so updateHeat doesn't need to be in the dep array
             const readKey = (payload.key as string) ?? "";
             if (readKey) {
               const { entries, updateHeat } = useMemoryStore.getState();

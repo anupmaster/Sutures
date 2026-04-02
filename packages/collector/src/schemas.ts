@@ -170,6 +170,8 @@ export const CommandTypeSchema = z.enum([
   'fork_from_checkpoint',
   'get_topology',
   'get_events',
+  'pause_all',
+  'resume_all',
 ]);
 
 export type CommandType = z.infer<typeof CommandTypeSchema>;

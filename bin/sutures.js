@@ -49,7 +49,15 @@ async function waitForServer(url, maxAttempts = 20) {
 
 async function runSimulator() {
   console.log('\n  Running demo simulation (3-agent research swarm)...\n');
-  return run('python3 examples/playground/simulate.py', root);
+  setTimeout(async () => {
+    try {
+      const res = await fetch(`http://localhost:${PORTS?.http ?? 9471}/api/simulate`, { method: 'POST' });
+      if (res.ok) console.log('[sutures] Demo simulation started');
+      else console.error('[sutures] Failed to start demo:', res.statusText);
+    } catch (e) {
+      console.error('[sutures] Failed to reach collector for demo:', e.message);
+    }
+  }, 3000);
 }
 
 function printHelp() {

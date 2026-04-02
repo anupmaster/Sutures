@@ -44,7 +44,7 @@ function analyzeRootCause(
 
     // Walk backwards from the error to find causal events
     const agentEvents = events.filter(
-      (e) => e.agentId === errorEvent.agentId && e.timestamp <= errorEvent.timestamp
+      (e) => e.agentId === errorEvent.agentId && e.id !== errorEvent.id && e.timestamp <= errorEvent.timestamp
     );
     const precedingEvents = agentEvents.slice(-10); // last 10 events before error
 

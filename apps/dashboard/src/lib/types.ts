@@ -2,10 +2,13 @@
 
 export type AgentState =
   | "idle"
+  | "spawned"
   | "thinking"
   | "acting"
+  | "observing"
   | "paused"
-  | "completed";
+  | "completed"
+  | "failed";
 
 export type BreakpointCondition =
   | "always"

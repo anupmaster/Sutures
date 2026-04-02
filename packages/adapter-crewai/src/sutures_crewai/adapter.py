@@ -142,7 +142,7 @@ class SuturesCrewAIAdapter:
 
         @wraps(original_kickoff)
         def instrumented_kickoff(*args: Any, **kwargs: Any) -> Any:
-            # Emit turn events for each task
+            # Emit turn.started for each task (the task IS about to execute)
             for task in getattr(crew, "tasks", []):
                 agent = getattr(task, "agent", None)
                 if not agent:
@@ -151,35 +151,12 @@ class SuturesCrewAIAdapter:
                 agent_name = getattr(agent, "role", None) or getattr(agent, "name", "unknown")
                 agent_id = adapter._get_agent_id(agent_name)
                 turn = adapter._next_turn(agent_id)
-
                 task_desc = getattr(task, "description", "")[:300]
 
                 adapter._emit(make_event(
                     adapter.swarm_id, agent_id, "turn.started",
                     {"turn_number": turn, "input": task_desc, "input_tokens": 0},
                 ))
-
-                adapter._emit(make_event(
-                    adapter.swarm_id, agent_id, "turn.thinking",
-                    {
-                        "turn_number": turn,
-                        "model": str(getattr(agent, "llm", "unknown")),
-                        "content": f"Processing task: {task_desc[:100]}",
-                    },
-                    severity="debug",
-                ))
-
-                # Emit tool call events for task tools
-                for tool in getattr(task, "tools", []) or getattr(agent, "tools", []):
-                    tool_name = getattr(tool, "name", None) or str(tool)
-                    adapter._emit(make_event(
-                        adapter.swarm_id, agent_id, "turn.acting",
-                        {
-                            "turn_number": turn,
-                            "tool_name": tool_name,
-                            "tool_input_summary": f"Task: {task_desc[:100]}",
-                        },
-                    ))
 
             # Execute original kickoff
             start_time = time.time()
@@ -190,13 +167,22 @@ class SuturesCrewAIAdapter:
             for agent in getattr(crew, "agents", []):
                 agent_name = getattr(agent, "role", None) or getattr(agent, "name", "unknown")
                 agent_id = adapter._get_agent_id(agent_name)
+                turn_count = adapter._turn_counts.get(agent_id, 0)
                 cost = adapter._costs.get(agent_id, 0.0)
 
+                adapter._emit(make_event(
+                    adapter.swarm_id, agent_id, "turn.completed",
+                    {
+                        "turn_number": turn_count,
+                        "output_summary": "Task completed",
+                        "duration_ms": duration_ms,
+                    },
+                ))
                 adapter._emit(make_event(
                     adapter.swarm_id, agent_id, "agent.completed",
                     {
                         "total_cost_usd": cost,
-                        "total_turns": adapter._turn_counts.get(agent_id, 0),
+                        "total_turns": turn_count,
                     },
                 ))
 

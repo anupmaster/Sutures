@@ -57,7 +57,7 @@ function buildRunFromEvents(events: AgentEvent[], label: string): RunSummary {
 
   let totalCost = 0;
   for (const e of events) {
-    if (e.type === "cost.tokens" && typeof e.payload.cost_usd === "number") {
+    if ((e.type === "cost.tokens" || e.type === "cost.api_call") && typeof e.payload.cost_usd === "number") {
       totalCost += e.payload.cost_usd as number;
     }
   }

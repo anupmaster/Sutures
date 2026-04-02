@@ -12,10 +12,13 @@ export const WS_URL = `ws://localhost:${WS_PORT}/v1/dashboard`;
 // --- Agent state colors ---
 export const STATE_COLORS: Record<AgentState, string> = {
   idle: "#6B7280",
+  spawned: "#6B7280",
   thinking: "#F59E0B",
   acting: "#3B82F6",
+  observing: "#3B82F6",
   paused: "#EF4444",
   completed: "#10B981",
+  failed: "#EF4444",
 };
 
 // --- Memory type colors ---

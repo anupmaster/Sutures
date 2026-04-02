@@ -254,11 +254,11 @@ export function TimelinePanel({ onSendCommand }: TimelinePanelProps) {
 
   // Group events by agent
   const grouped = useMemo(() => {
-    const map = new Map<string, { agentId: string; events: AgentEvent[] }>();
+    const map = new Map<string, { agentId: string; agentName: string; events: AgentEvent[] }>();
     for (const event of filteredEvents) {
-      const key = event.agentName;
+      const key = event.agentId;
       if (!map.has(key)) {
-        map.set(key, { agentId: event.agentId, events: [] });
+        map.set(key, { agentId: event.agentId, agentName: event.agentName, events: [] });
       }
       map.get(key)!.events.push(event);
     }
@@ -286,9 +286,9 @@ export function TimelinePanel({ onSendCommand }: TimelinePanelProps) {
     setAutoScroll(scrollLeft + clientWidth >= scrollWidth - 20);
   }, []);
 
-  const agentNames = useMemo(() => Array.from(grouped.keys()), [grouped]);
+  const agentIds = useMemo(() => Array.from(grouped.keys()), [grouped]);
 
-  if (agentNames.length === 0) {
+  if (agentIds.length === 0) {
     return (
       <div
         className="h-full flex items-center justify-center font-body text-sm"
@@ -390,12 +390,12 @@ export function TimelinePanel({ onSendCommand }: TimelinePanelProps) {
         </div>
 
         {/* Lanes */}
-        {agentNames.map((name) => {
-          const data = grouped.get(name)!;
+        {agentIds.map((id) => {
+          const data = grouped.get(id)!;
           return (
             <SwimLane
-              key={name}
-              agentName={name}
+              key={id}
+              agentName={data.agentName}
               agentId={data.agentId}
               events={data.events}
               minTime={minTime}

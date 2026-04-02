@@ -159,13 +159,16 @@ export function useTopology(): TopologyResult {
     [applyLayout]
   );
 
+  // Separate cleanup effect — only clears on unmount
   useEffect(() => {
-    const agentList = Array.from(agents.values());
-    scheduleLayout(agentList, storeEdges);
-
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const agentList = Array.from(agents.values());
+    scheduleLayout(agentList, storeEdges);
   }, [agents, storeEdges, scheduleLayout]);
 
   return { nodes, edges, isLayouting };

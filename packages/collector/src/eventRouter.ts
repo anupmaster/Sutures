@@ -165,6 +165,12 @@ export class EventRouter {
       case 'get_events':
         this.handleGetEvents(payload, ws);
         break;
+      case 'pause_all':
+        this.handlePauseAll(payload, ws);
+        break;
+      case 'resume_all':
+        this.handleResumeAll(payload, ws);
+        break;
     }
   }
 
@@ -231,12 +237,17 @@ export class EventRouter {
       return;
     }
 
+    const mode = typeof payload['mode'] === 'string' ? payload['mode'] : 'append';
+
     const injectionEvent = this.breakpointController.prepareInjection({
       agent_id: agentId,
       state: payload['state'] as Record<string, unknown> | undefined,
       messages: payload['messages'] as Array<Record<string, unknown>> | undefined,
       resume: true,
     });
+
+    // Include mode in the injection event data so adapters know how to apply it
+    (injectionEvent.data as Record<string, unknown>).mode = mode;
 
     // Fill in swarm_id from topology if available
     for (const [swarmId, topo] of this.topologies) {
@@ -279,7 +290,7 @@ export class EventRouter {
     // Create a forked checkpoint with a new ID
     const forkedCheckpoint: Checkpoint = {
       checkpoint_id: uuidv7(),
-      thread_id: checkpoint.thread_id,
+      thread_id: `${checkpoint.thread_id}:fork:${uuidv7().slice(0, 8)}`,
       agent_id: checkpoint.agent_id,
       swarm_id: checkpoint.swarm_id,
       state: checkpoint.state,
@@ -324,6 +335,42 @@ export class EventRouter {
     }
 
     this.sendResponse(ws, 'get_events', { events });
+  }
+
+  private handlePauseAll(payload: Record<string, unknown>, ws: WebSocket): void {
+    const swarmId = typeof payload['swarm_id'] === 'string' ? payload['swarm_id'] : null;
+    const pauseEvent: AgentEvent = {
+      event_id: uuidv7(),
+      swarm_id: swarmId ?? '*',
+      agent_id: '*',
+      timestamp: new Date().toISOString(),
+      event_type: 'agent.paused',
+      severity: 'info',
+      data: { reason: 'pause_all' },
+      protocol_version: '1.0.0',
+    };
+    this.broadcastToAdapters({ type: 'event', payload: pauseEvent });
+    this.ringBuffer.push(pauseEvent);
+    this.broadcastToDashboards({ type: 'event', payload: pauseEvent });
+    this.sendResponse(ws, 'pause_all', { status: 'ok' });
+  }
+
+  private handleResumeAll(payload: Record<string, unknown>, ws: WebSocket): void {
+    const swarmId = typeof payload['swarm_id'] === 'string' ? payload['swarm_id'] : null;
+    const resumeEvent: AgentEvent = {
+      event_id: uuidv7(),
+      swarm_id: swarmId ?? '*',
+      agent_id: '*',
+      timestamp: new Date().toISOString(),
+      event_type: 'agent.resumed',
+      severity: 'info',
+      data: { reason: 'resume_all' },
+      protocol_version: '1.0.0',
+    };
+    this.broadcastToAdapters({ type: 'event', payload: resumeEvent });
+    this.ringBuffer.push(resumeEvent);
+    this.broadcastToDashboards({ type: 'event', payload: resumeEvent });
+    this.sendResponse(ws, 'resume_all', { status: 'ok' });
   }
 
   /**
